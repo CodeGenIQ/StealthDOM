@@ -1228,13 +1228,33 @@ async def browser_handle_dialog(tab_id: int | str, accept: bool = True, prompt_t
         accept: True to accept (click OK), False to dismiss (click Cancel)
         prompt_text: Optional text to enter into a prompt dialog
     """
-    kwargs = {"tabId": tab_id, "accept": accept}
-    if prompt_text is not None:
-        kwargs["promptText"] = prompt_text
-    result = await send_command("handleDialog", **kwargs)
+    result = await send_command("handleDialog", tabId=tab_id, accept=accept, promptText=prompt_text)
     if not result.get("success"):
         return f"Error: {result.get('error')}"
     return "Dialog handled successfully"
+
+
+@mcp.tool()
+async def browser_get_dialog(tab_id: int | str) -> str:
+    """Check if there is an active native JavaScript dialog (alert, confirm, prompt) on the tab.
+    
+    Args:
+        tab_id: ID of the tab (get from browser_list_tabs)
+        
+    Returns:
+        JSON string containing dialog details if one is open:
+        { "message": "...", "type": "alert/confirm/prompt", "defaultPrompt": "..." }
+        Or a message saying no dialog is active.
+    """
+    result = await send_command("getActiveDialog", tabId=tab_id)
+    if not result.get("success"):
+        return f"Error: {result.get('error')}"
+        
+    data = result.get("data")
+    if data is None:
+        return "No native dialog is currently active."
+        
+    return json.dumps(data, indent=2)
 
 
 # ==========================================

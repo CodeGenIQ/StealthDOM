@@ -827,6 +827,23 @@ Uses the Chrome DevTools Protocol (`chrome.debugger`) to natively intercept and 
 
 ---
 
+### getActiveDialog
+Check if there is an active native JavaScript dialog (`alert`, `confirm`, `prompt`) on the tab.
+Returns the dialog's message text and type if one is currently blocking the page.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `tabId` | integer or string | ✅ | — | Tab ID (numeric or virtualId) |
+
+```json
+{ "action": "getActiveDialog", "tabId": 123 }
+→ { "data": { "message": "Are you sure you want to delete this?", "type": "confirm", "defaultPrompt": "" } }
+```
+**MCP Tool:** `browser_get_dialog(tab_id)`  
+**Handled by:** Background Script (CDP)
+
+---
+
 ## Network Capture
 
 ### startNetCapture

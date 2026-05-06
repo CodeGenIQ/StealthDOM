@@ -65,6 +65,10 @@ async function ensureContentScriptInjected(tabId) {
 
 const _attachedDebuggers = new Set();
 
+// Tracks the most recent dialog payload for each tab.
+// Format: tabId -> { type, message, defaultPrompt }
+const _activeDialogs = new Map();
+
 async function ensureDebuggerAttached(tabId) {
     if (_attachedDebuggers.has(tabId)) return { tabId };
     const target = { tabId };
@@ -79,8 +83,20 @@ async function ensureDebuggerAttached(tabId) {
     return target;
 }
 
+chrome.debugger.onEvent.addListener((source, method, params) => {
+    if (source.tabId && method === 'Page.javascriptDialogOpening') {
+        _activeDialogs.set(source.tabId, params);
+        console.log('[StealthDOM] Intercepted native dialog on tab', source.tabId, params);
+    } else if (source.tabId && method === 'Page.javascriptDialogClosed') {
+        _activeDialogs.delete(source.tabId);
+    }
+});
+
 chrome.debugger.onDetach.addListener((source, reason) => {
-    if (source.tabId) _attachedDebuggers.delete(source.tabId);
+    if (source.tabId) {
+        _attachedDebuggers.delete(source.tabId);
+        _activeDialogs.delete(source.tabId);
+    }
 });
 
 // Clean up injection tracking when tabs navigate or close
@@ -511,10 +527,14 @@ async function handleBackgroundCommand(msg) {
         case 'disableBlock':
             disableConversationBlocking();
             return { success: true, data: "Blocking disabled" };
+        case 'focus':
+            return await forwardToContentScript(msg);
 
         // === Dialog Handling ===
         case 'handleDialog':
             return await cmdHandleDialog(msg.tabId, msg.accept, msg.promptText);
+        case 'getActiveDialog':
+            return await cmdGetActiveDialog(msg.tabId);
 
         default:
             return { success: false, error: `Unknown background action: ${action}` };
@@ -535,6 +555,7 @@ async function cmdHandleDialog(tabId, accept, promptText) {
         }
         
         await chrome.debugger.sendCommand(target, 'Page.handleJavaScriptDialog', params);
+        _activeDialogs.delete(tabId); // Manually clear it just in case
         return { success: true };
     } catch (e) {
         // If it still fails with "No dialog is showing", it means a dialog opened before 
@@ -543,6 +564,13 @@ async function cmdHandleDialog(tabId, accept, promptText) {
         // this should be extremely rare.
         return { success: false, error: e.message };
     }
+}
+
+async function cmdGetActiveDialog(tabId) {
+    if (_activeDialogs.has(tabId)) {
+        return { success: true, data: _activeDialogs.get(tabId) };
+    }
+    return { success: true, data: null };
 }
 
 // ==========================================
@@ -661,7 +689,9 @@ async function bridgeRouteCommand(msg) {
         'newWindow', 'newIncognitoWindow', 'closeWindow', 'resizeWindow',
         'executeScript', 'executeScriptAllFrames', 'listFrames',
         'enableBlock', 'disableBlock',
-        'waitForUrl', 'handleDialog',
+        'ping', 'hover', 'removeByText', 'handleDialog', 'getActiveDialog',
+        'proxyFetch',
+        'waitForUrl',
     ];
 
     try {
