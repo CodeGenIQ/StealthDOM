@@ -848,6 +848,9 @@ async def browser_screenshot(tab_id: int | str, save_path: str) -> str:
         save_path: File path to save the screenshot as PNG (e.g., 'C:/screenshots/page.png').
                    Parent directories will be created automatically.
     """
+    if not os.path.isabs(save_path):
+        return "Error: save_path must be an absolute path (e.g., 'C:/tmp/page.png'). Relative paths are rejected to prevent polluting the server's working directory."
+
     result = await send_command("captureScreenshot", tabId=tab_id)
     if not result.get("success"):
         return f"Error: {result.get('error')}"
@@ -880,6 +883,9 @@ async def browser_screenshot_full_page(tab_id: int | str, save_path: str, max_he
         save_path: File path to save the screenshot as PNG.
         max_height: Maximum page height to capture in pixels (default 20000). Prevents memory issues on infinite-scroll pages.
     """
+    if not os.path.isabs(save_path):
+        return "Error: save_path must be an absolute path (e.g., 'C:/tmp/page.png'). Relative paths are rejected to prevent polluting the server's working directory."
+
     result = await send_command("captureFullPageScreenshot", tabId=tab_id, maxHeight=max_height, _timeout=120)
     if not result.get("success"):
         return f"Error: {result.get('error')}"
