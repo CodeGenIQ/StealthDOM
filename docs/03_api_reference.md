@@ -805,6 +805,28 @@ Supports both expressions and return statements:
 
 ---
 
+## Native Dialog Handling
+
+### handleDialog
+Accept or dismiss a native JavaScript dialog (`window.alert`, `window.confirm`, `window.prompt`).
+Uses the Chrome DevTools Protocol (`chrome.debugger`) to natively intercept and resolve dialogs, preventing them from blocking the main thread.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `tabId` | integer or string | ✅ | — | Tab ID (numeric or virtualId) |
+| `accept` | boolean | — | `true` | `true` to accept (click OK), `false` to dismiss (click Cancel) |
+| `promptText` | string | — | — | Optional text to enter into a prompt dialog |
+
+```json
+{ "action": "handleDialog", "tabId": 123, "accept": true }
+{ "action": "handleDialog", "tabId": 123, "accept": true, "promptText": "John Doe" }
+{ "action": "handleDialog", "tabId": 123, "accept": false }
+```
+**MCP Tool:** `browser_handle_dialog(tab_id, accept=True, prompt_text=None)`  
+**Handled by:** Background Script (CDP)
+
+---
+
 ## Network Capture
 
 ### startNetCapture
