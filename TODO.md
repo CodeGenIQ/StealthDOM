@@ -19,10 +19,10 @@
 - [ ] **isTrusted Spoofing**: Research and implement the safest way to mask event trust status without triggering side-channel detection.
 
 ## New Features & Capabilities
-- [ ] **Handle Native JavaScript Dialogs (`browser_handle_dialog`)**
+- [x] **Handle Native JavaScript Dialogs (`browser_handle_dialog`)** ✅ Implemented
   - **Description**: Add a new tool to natively accept or dismiss `window.alert`, `window.confirm`, or `window.prompt` dialogs from the background service worker using CDP.
   - **Purpose**: Prevents blocked content scripts caused by main thread blocking from native dialogs.
-  - **Implementation Status**: See [Implementation Details](#handle-native-javascript-dialogs-1) below.
+  - **Implementation Status**: See [Implementation Details](#handle-native-javascript-dialogs-completed) below.
 - [ ] **Tab Discarding (`browser_discard_tab`)**
   - **Description**: Add a new background command `chrome.tabs.discard(tabId)` to forcefully put a tab into Memory Saver (sleeping) mode.
   - **Purpose**: Allows developers to write test cases that explicitly test an agent's ability to handle and recover from discarded tabs.
@@ -48,7 +48,7 @@
 
 ## Implementation Details
 
-### Handle Native JavaScript Dialogs
+### Handle Native JavaScript Dialogs (COMPLETED)
 
 Currently, StealthDOM cannot dismiss native `window.alert`, `window.confirm`, or `window.prompt` dialogs because they block the main JavaScript thread, which also blocks content scripts.
 

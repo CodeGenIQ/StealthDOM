@@ -1653,6 +1653,65 @@ async def test_mouse_cdp(results: TestResults):
         await ws.close()
 
 
+async def test_handle_dialog(results: TestResults):
+    """Test that we can handle native JS dialogs."""
+    print("\n[Test: Handle Native Dialogs]")
+    ws = await websockets.connect(BRIDGE_URL)
+    try:
+        # Create a local test URL
+        test_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_dialog.html")
+        test_url = f"file:///{test_path.replace(chr(92), '/')}"
+        
+        tab_id = await ensure_test_tab(ws, test_url)
+        if not tab_id:
+            results.fail("Handle Dialogs", "Could not open test dialog tab")
+            return
+            
+        # Dialogs only show properly (and can be dismissed via keys) on active tabs
+        await bridge_send(ws, "switchTab", tabId=tab_id)
+        await asyncio.sleep(0.5)
+            
+        # 1. Alert test
+        # Click the button which has a setTimeout to trigger alert
+        await bridge_send(ws, "click", tabId=tab_id, selector="#alertBtn")
+        await asyncio.sleep(0.3)  # wait for setTimeout
+        r = await bridge_send(ws, "handleDialog", tabId=tab_id, accept=True)
+        if r.get("success"):
+            results.ok("Dismissed window.alert correctly")
+        else:
+            results.fail("Alert dismiss", r.get("error"))
+
+        # 2. Confirm test (dismiss / false)
+        await bridge_send(ws, "click", tabId=tab_id, selector="#confirmBtn")
+        await asyncio.sleep(0.3)
+        r = await bridge_send(ws, "handleDialog", tabId=tab_id, accept=False)
+        if r.get("success"):
+            eval_r = await bridge_send(ws, "evaluate", tabId=tab_id, code="window.testConfirmResult")
+            if eval_r.get("data") is False:
+                results.ok("Dismissed window.confirm (returned false)")
+            else:
+                results.fail("Confirm dismiss", f"Expected false, got {eval_r.get('data')}")
+        else:
+            results.fail("Confirm dismiss", r.get("error"))
+            
+        # 3. Prompt test
+        await bridge_send(ws, "click", tabId=tab_id, selector="#promptBtn")
+        await asyncio.sleep(0.3)
+        r = await bridge_send(ws, "handleDialog", tabId=tab_id, accept=True, promptText="StealthBot")
+        if r.get("success"):
+            eval_r = await bridge_send(ws, "evaluate", tabId=tab_id, code="window.testPromptResult")
+            if eval_r.get("data") == "StealthBot":
+                results.ok("Accepted window.prompt with text correctly")
+            else:
+                results.fail("Prompt accept", f"Expected 'StealthBot', got {eval_r.get('data')}")
+        else:
+            results.fail("Prompt accept", r.get("error"))
+            
+    except Exception as e:
+        results.fail("Handle Dialogs", str(e))
+    finally:
+        await ws.close()
+
 # ==========================================
 # Runner
 # ==========================================
@@ -1758,6 +1817,9 @@ async def run_all_tests():
     await test_wait_for_url(results)
     await test_upload_file(results)
     await test_incognito_window(results)
+
+    # Dialog Handling
+    await test_handle_dialog(results)
 
     success = results.summary()
 

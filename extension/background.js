@@ -46,21 +46,57 @@ async function ensureContentScriptInjected(tabId) {
             files: ['content_script.js'],
         });
         _injectedTabs.add(tabId);
+        
+        // Eagerly attach the debugger so we are ready to catch any future dialogs
+        // triggered by the content script.
+        await ensureDebuggerAttached(tabId);
     } catch (e) {
         // Don't add to set — let the next command retry
         throw new Error(`Content script injection failed: ${e.message}. If the tab is sleeping/discarded, use browser_reload or browser_switch_tab to wake it up first.`);
     }
 }
 
+// ==========================================
+// Persistent Debugger Sessions
+// ==========================================
+// Since the user is running with --silent-debugger-extension-api, we can keep
+// the debugger attached permanently to any tab we interact with. This is CRITICAL
+// for catching synchronous JavaScript dialogs (alert/confirm/prompt).
+
+const _attachedDebuggers = new Set();
+
+async function ensureDebuggerAttached(tabId) {
+    if (_attachedDebuggers.has(tabId)) return { tabId };
+    const target = { tabId };
+    try {
+        await chrome.debugger.attach(target, '1.3');
+        await chrome.debugger.sendCommand(target, 'Page.enable');
+        _attachedDebuggers.add(tabId);
+    } catch (e) {
+        // If it's already attached by another extension or DevTools, that's fine.
+        console.warn(`[StealthDOM] Debugger attach failed for tab ${tabId}:`, e.message);
+    }
+    return target;
+}
+
+chrome.debugger.onDetach.addListener((source, reason) => {
+    if (source.tabId) _attachedDebuggers.delete(source.tabId);
+});
+
 // Clean up injection tracking when tabs navigate or close
 chrome.tabs.onRemoved.addListener((tabId) => {
     _injectedTabs.delete(tabId);
+    _attachedDebuggers.delete(tabId);
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     // When a tab navigates to a new page, the injected script is gone
     if (changeInfo.status === 'loading') {
         _injectedTabs.delete(tabId);
+        // Debugger stays attached across navigations, but we re-enable Page just in case
+        if (_attachedDebuggers.has(tabId)) {
+            chrome.debugger.sendCommand({ tabId }, 'Page.enable').catch(()=>null);
+        }
     }
 });
 
@@ -476,8 +512,36 @@ async function handleBackgroundCommand(msg) {
             disableConversationBlocking();
             return { success: true, data: "Blocking disabled" };
 
+        // === Dialog Handling ===
+        case 'handleDialog':
+            return await cmdHandleDialog(msg.tabId, msg.accept, msg.promptText);
+
         default:
             return { success: false, error: `Unknown background action: ${action}` };
+    }
+}
+
+// ==========================================
+// Dialog Handling
+// ==========================================
+
+async function cmdHandleDialog(tabId, accept, promptText) {
+    try {
+        const target = await ensureDebuggerAttached(tabId);
+        
+        const params = { accept };
+        if (promptText !== undefined) {
+            params.promptText = promptText;
+        }
+        
+        await chrome.debugger.sendCommand(target, 'Page.handleJavaScriptDialog', params);
+        return { success: true };
+    } catch (e) {
+        // If it still fails with "No dialog is showing", it means a dialog opened before 
+        // the agent's very first interaction with the tab. There is no recovery from this
+        // in Chrome's architecture, but since we now eagerly attach on every interaction,
+        // this should be extremely rare.
+        return { success: false, error: e.message };
     }
 }
 
@@ -597,7 +661,7 @@ async function bridgeRouteCommand(msg) {
         'newWindow', 'newIncognitoWindow', 'closeWindow', 'resizeWindow',
         'executeScript', 'executeScriptAllFrames', 'listFrames',
         'enableBlock', 'disableBlock',
-        'waitForUrl',
+        'waitForUrl', 'handleDialog',
     ];
 
     try {
@@ -780,15 +844,13 @@ async function cmdGoBack(tabId) {
  * - Tab is a browser-internal page (chrome://, brave://, etc.) — already blocked upstream
  */
 async function cmdCaptureScreenshotCDP(tabId) {
-    const target = { tabId };
     try {
-        await chrome.debugger.attach(target, '1.3');
+        const target = await ensureDebuggerAttached(tabId);
         const result = await chrome.debugger.sendCommand(target, 'Page.captureScreenshot', {
             format: 'png',
             quality: 100,
             fromSurface: true,
         });
-        await chrome.debugger.detach(target);
         return {
             success: true,
             data: {
@@ -799,8 +861,6 @@ async function cmdCaptureScreenshotCDP(tabId) {
             }
         };
     } catch (e) {
-        // Ensure detach on any error
-        try { await chrome.debugger.detach(target); } catch (_) {}
         throw e; // Rethrow so caller can fall back to captureVisibleTab
     }
 }
@@ -818,9 +878,9 @@ async function cmdCaptureScreenshotCDP(tabId) {
  * scroll-stitch approach using captureVisibleTab.
  */
 async function cmdCaptureFullPageScreenshotCDP(tabId, maxHeight = 20000) {
-    const target = { tabId };
+    let target;
     try {
-        await chrome.debugger.attach(target, '1.3');
+        target = await ensureDebuggerAttached(tabId);
 
         // Get full page dimensions
         const metrics = await chrome.debugger.sendCommand(target, 'Page.getLayoutMetrics');
@@ -850,7 +910,6 @@ async function cmdCaptureFullPageScreenshotCDP(tabId, maxHeight = 20000) {
 
         // Reset device metrics to original
         await chrome.debugger.sendCommand(target, 'Emulation.clearDeviceMetricsOverride');
-        await chrome.debugger.detach(target);
 
         return {
             success: true,
@@ -870,9 +929,10 @@ async function cmdCaptureFullPageScreenshotCDP(tabId, maxHeight = 20000) {
             }
         };
     } catch (e) {
-        // Ensure detach + metrics reset on any error
-        try { await chrome.debugger.sendCommand(target, 'Emulation.clearDeviceMetricsOverride'); } catch (_) {}
-        try { await chrome.debugger.detach(target); } catch (_) {}
+        // Ensure metrics reset on any error
+        if (target) {
+            try { await chrome.debugger.sendCommand(target, 'Emulation.clearDeviceMetricsOverride'); } catch (_) {}
+        }
         throw e; // Rethrow so caller can fall back to scroll-stitch
     }
 }
@@ -1239,27 +1299,16 @@ async function ensureWindowNotMinimized(windowId) {
     }
 }
 
-/**
- * Shared helper: attach chrome.debugger, run an async function, detach.
- * Auto-restores minimized windows before attaching — Chromium's renderer
- * must be active for CDP Input.dispatch* and Page.capture* to work.
- * @param {number} tabId
- * @param {function(target): Promise<any>} fn - receives {tabId} target
- * @returns {Promise<any>}
- */
 async function withDebugger(tabId, fn) {
     // Ensure renderer is alive (minimized windows suspend it)
     const tab = await chrome.tabs.get(tabId);
     await ensureWindowNotMinimized(tab.windowId);
 
-    const target = { tabId };
     try {
-        await chrome.debugger.attach(target, '1.3');
+        const target = await ensureDebuggerAttached(tabId);
         const result = await fn(target);
-        await chrome.debugger.detach(target);
         return result;
     } catch (e) {
-        try { await chrome.debugger.detach(target); } catch (_) {}
         throw e;
     }
 }
