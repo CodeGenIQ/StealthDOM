@@ -836,20 +836,14 @@ async def browser_get_page_html(tab_id: int | str, max_length: int = 0, frame_id
 
 
 @mcp.tool()
-async def browser_screenshot(tab_id: int | str, save_path: str) -> str:
+async def browser_screenshot(tab_id: int | str, absolute_save_path: str) -> str:
     """Take a screenshot of the specified tab and save it to disk. Returns the file path.
-    
-    Uses CDP (chrome.debugger) for silent capture — no window focus stealing,
-    no tab activation, no rate limits. Falls back to captureVisibleTab if CDP
-    is unavailable (e.g., DevTools is open on the target tab).
-    
     Args:
         tab_id: ID of the tab to screenshot (get from browser_list_tabs)
-        save_path: File path to save the screenshot as PNG (e.g., 'C:/screenshots/page.png').
-                   Parent directories will be created automatically.
+        absolute_save_path: Absolute file path to save the PNG (e.g., 'C:/tmp/page.png').
     """
-    if not os.path.isabs(save_path):
-        return "Error: save_path must be an absolute path (e.g., 'C:/tmp/page.png'). Relative paths are rejected to prevent polluting the server's working directory."
+    if not os.path.isabs(absolute_save_path):
+        return "Error: absolute_save_path must be an absolute path (e.g., 'C:/tmp/page.png'). Relative paths are rejected to prevent polluting the server's working directory."
 
     result = await send_command("captureScreenshot", tabId=tab_id)
     if not result.get("success"):
@@ -861,30 +855,22 @@ async def browser_screenshot(tab_id: int | str, save_path: str) -> str:
         return "Screenshot failed"
 
     b64 = data_url.split(",", 1)[-1] if "," in data_url else data_url
-    os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
-    with open(save_path, "wb") as f:
+    os.makedirs(os.path.dirname(os.path.abspath(absolute_save_path)), exist_ok=True)
+    with open(absolute_save_path, "wb") as f:
         f.write(base64.b64decode(b64))
-    return f"Screenshot saved to: {os.path.abspath(save_path)}"
+    return f"Screenshot saved to: {os.path.abspath(absolute_save_path)}"
 
 
 @mcp.tool()
-async def browser_screenshot_full_page(tab_id: int | str, save_path: str, max_height: int = 20000) -> str:
+async def browser_screenshot_full_page(tab_id: int | str, absolute_save_path: str, max_height: int = 20000) -> str:
     """Take a full-page screenshot by scrolling and stitching viewport captures.
-    Saves to disk and returns the file path. Captures the entire document, not just 
-    the visible area. Sticky/fixed elements are automatically hidden during middle 
-    frames to avoid duplication.
-    
-    Uses CDP single-shot capture when available — renders the full page in one
-    pass without scrolling or focus stealing. Falls back to scroll-and-stitch
-    via captureVisibleTab if CDP is unavailable.
-    
     Args:
         tab_id: ID of the tab to screenshot (get from browser_list_tabs)
-        save_path: File path to save the screenshot as PNG.
-        max_height: Maximum page height to capture in pixels (default 20000). Prevents memory issues on infinite-scroll pages.
+        absolute_save_path: Absolute file path to save the PNG.
+        max_height: Maximum page height to capture in pixels (default 20000).
     """
-    if not os.path.isabs(save_path):
-        return "Error: save_path must be an absolute path (e.g., 'C:/tmp/page.png'). Relative paths are rejected to prevent polluting the server's working directory."
+    if not os.path.isabs(absolute_save_path):
+        return "Error: absolute_save_path must be an absolute path (e.g., 'C:/tmp/page.png'). Relative paths are rejected to prevent polluting the server's working directory."
 
     result = await send_command("captureFullPageScreenshot", tabId=tab_id, maxHeight=max_height, _timeout=120)
     if not result.get("success"):
@@ -897,10 +883,10 @@ async def browser_screenshot_full_page(tab_id: int | str, save_path: str, max_he
         return "Full-page screenshot failed"
 
     b64 = data_url.split(",", 1)[-1] if "," in data_url else data_url
-    os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
-    with open(save_path, "wb") as f:
+    os.makedirs(os.path.dirname(os.path.abspath(absolute_save_path)), exist_ok=True)
+    with open(absolute_save_path, "wb") as f:
         f.write(base64.b64decode(b64))
-    return f"Full-page screenshot saved to: {os.path.abspath(save_path)} ({dims.get('width')}x{dims.get('height')}px, {dims.get('frames')} frames)"
+    return f"Full-page screenshot saved to: {os.path.abspath(absolute_save_path)} ({dims.get('width')}x{dims.get('height')}px, {dims.get('frames')} frames)"
 
 
 @mcp.tool()

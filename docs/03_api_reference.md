@@ -710,8 +710,8 @@ Capture a screenshot of a specific tab as PNG. Uses CDP (`chrome.debugger`) for 
 { "action": "captureScreenshot", "tabId": 123 }
 → { "data": { "dataUrl": "data:image/png;base64,...", "tabId": 123 } }
 ```
-**MCP Tool:** `browser_screenshot(tab_id, save_path)`  
-The MCP tool saves the PNG to the specified `save_path` on disk and returns the file path.
+**MCP Tool:** `browser_screenshot(tab_id, absolute_save_path)`  
+The MCP tool saves the PNG to the specified `absolute_save_path` on disk and returns the file path.
 **Handled by:** Background (CDP primary, captureVisibleTab fallback)
 
 ---
@@ -729,8 +729,8 @@ Capture a full-page screenshot. Uses CDP single-shot rendering when available �
 { "action": "captureFullPageScreenshot", "tabId": 123, "maxHeight": 30000 }
 → { "data": { "dataUrl": "data:image/png;base64,...", "fullPage": true, "dimensions": { "width": 2560, "height": 15360, "frames": 1, "actualHeight": 7680 } } }
 ```
-**MCP Tool:** `browser_screenshot_full_page(tab_id, save_path, max_height=20000)`  
-Saves the PNG to the specified `save_path` on disk and returns the file path with dimensions info.
+**MCP Tool:** `browser_screenshot_full_page(tab_id, absolute_save_path, max_height=20000)`  
+Saves the PNG to the specified `absolute_save_path` on disk and returns the file path with dimensions info.
 **Handled by:** Background (CDP primary, scroll-stitch fallback)
 
 ---
