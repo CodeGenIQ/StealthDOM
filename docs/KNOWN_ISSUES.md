@@ -1,6 +1,6 @@
 # StealthDOM — Known Issues
 
-*Last updated: v3.2.0*
+*Last updated: v3.3.0*
 
 ---
 
