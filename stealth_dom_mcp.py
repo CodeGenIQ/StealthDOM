@@ -836,9 +836,8 @@ async def browser_get_page_html(tab_id: int | str, max_length: int = 0, frame_id
 
 
 @mcp.tool()
-async def browser_screenshot(tab_id: int | str, save_path: str | None = None) -> str:
-    """Take a screenshot of the specified tab. Returns base64 PNG data URL.
-    If save_path is provided, saves to disk instead and returns the file path.
+async def browser_screenshot(tab_id: int | str, save_path: str) -> str:
+    """Take a screenshot of the specified tab and save it to disk. Returns the file path.
     
     Uses CDP (chrome.debugger) for silent capture — no window focus stealing,
     no tab activation, no rate limits. Falls back to captureVisibleTab if CDP
@@ -846,8 +845,7 @@ async def browser_screenshot(tab_id: int | str, save_path: str | None = None) ->
     
     Args:
         tab_id: ID of the tab to screenshot (get from browser_list_tabs)
-        save_path: Optional file path to save the screenshot as PNG (e.g., 'C:/screenshots/page.png').
-                   If provided, saves to disk and returns the file path instead of base64 data.
+        save_path: File path to save the screenshot as PNG (e.g., 'C:/screenshots/page.png').
                    Parent directories will be created automatically.
     """
     result = await send_command("captureScreenshot", tabId=tab_id)
@@ -856,22 +854,22 @@ async def browser_screenshot(tab_id: int | str, save_path: str | None = None) ->
     data = result.get("data", {})
     data_url = data.get("dataUrl", "")
 
-    if save_path and data_url:
-        b64 = data_url.split(",", 1)[-1] if "," in data_url else data_url
-        os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
-        with open(save_path, "wb") as f:
-            f.write(base64.b64decode(b64))
-        return f"Screenshot saved to: {os.path.abspath(save_path)}"
+    if not data_url:
+        return "Screenshot failed"
 
-    return data_url or "Screenshot failed"
+    b64 = data_url.split(",", 1)[-1] if "," in data_url else data_url
+    os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+    with open(save_path, "wb") as f:
+        f.write(base64.b64decode(b64))
+    return f"Screenshot saved to: {os.path.abspath(save_path)}"
 
 
 @mcp.tool()
-async def browser_screenshot_full_page(tab_id: int | str, max_height: int = 20000, save_path: str | None = None) -> str:
+async def browser_screenshot_full_page(tab_id: int | str, save_path: str, max_height: int = 20000) -> str:
     """Take a full-page screenshot by scrolling and stitching viewport captures.
-    If save_path is provided, saves to disk instead and returns the file path.
-    Captures the entire document, not just the visible area. Sticky/fixed elements
-    are automatically hidden during middle frames to avoid duplication.
+    Saves to disk and returns the file path. Captures the entire document, not just 
+    the visible area. Sticky/fixed elements are automatically hidden during middle 
+    frames to avoid duplication.
     
     Uses CDP single-shot capture when available — renders the full page in one
     pass without scrolling or focus stealing. Falls back to scroll-and-stitch
@@ -879,8 +877,8 @@ async def browser_screenshot_full_page(tab_id: int | str, max_height: int = 2000
     
     Args:
         tab_id: ID of the tab to screenshot (get from browser_list_tabs)
+        save_path: File path to save the screenshot as PNG.
         max_height: Maximum page height to capture in pixels (default 20000). Prevents memory issues on infinite-scroll pages.
-        save_path: Optional file path to save the screenshot as PNG. If provided, saves to disk and returns the file path.
     """
     result = await send_command("captureFullPageScreenshot", tabId=tab_id, maxHeight=max_height, _timeout=120)
     if not result.get("success"):
@@ -889,14 +887,14 @@ async def browser_screenshot_full_page(tab_id: int | str, max_height: int = 2000
     data_url = data.get("dataUrl", "")
     dims = data.get("dimensions", {})
 
-    if save_path and data_url:
-        b64 = data_url.split(",", 1)[-1] if "," in data_url else data_url
-        os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
-        with open(save_path, "wb") as f:
-            f.write(base64.b64decode(b64))
-        return f"Full-page screenshot saved to: {os.path.abspath(save_path)} ({dims.get('width')}x{dims.get('height')}px, {dims.get('frames')} frames)"
+    if not data_url:
+        return "Full-page screenshot failed"
 
-    return data_url or "Full-page screenshot failed"
+    b64 = data_url.split(",", 1)[-1] if "," in data_url else data_url
+    os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+    with open(save_path, "wb") as f:
+        f.write(base64.b64decode(b64))
+    return f"Full-page screenshot saved to: {os.path.abspath(save_path)} ({dims.get('width')}x{dims.get('height')}px, {dims.get('frames')} frames)"
 
 
 @mcp.tool()

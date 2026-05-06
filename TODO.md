@@ -9,7 +9,7 @@
 - [ ] **Binary WebSocket Support**: Transition from JSON-wrapped Base64 (which adds 33% overhead) to raw binary frames for media assets.
 - [ ] **Configurable Payload Limits**: Expose a `max_payload_size` setting in `bridge_server.py` and the extension manifest to allow larger one-shot transfers when safe.
 - [ ] **Off-Pipe Transfer**: Implement a "staging" mechanism where massive assets (videos, 4K images) are saved to a temporary local directory or `indexedDB` and picked up by the bridge, bypassing the WebSocket pipe.
-- [ ] **Screenshot Tools: Make `save_path` Required, Remove Base64 Output**: In `browser_screenshot` and `browser_screenshot_full_page`, make the `save_path` parameter required instead of optional and remove the base64 data URL return path. AI agents skip optional parameters and cannot interpret raw base64 — this leads to wasted calls and incorrect conclusions about page state. The agent must provide the path since it's the only party that knows which directories it has read access to (IDE sandbox restrictions).
+- [x] **Screenshot Tools: Make `save_path` Required, Remove Base64 Output**: In `browser_screenshot` and `browser_screenshot_full_page`, make the `save_path` parameter required instead of optional and remove the base64 data URL return path. AI agents skip optional parameters and cannot interpret raw base64 — this leads to wasted calls and incorrect conclusions about page state. The agent must provide the path since it's the only party that knows which directories it has read access to (IDE sandbox restrictions).
 
 ## God Mode Evolution (StealthDOM 2.0)
 - [ ] **Implementation of [God Mode Manifesto](./docs/god_mode_manifesto.md)**
