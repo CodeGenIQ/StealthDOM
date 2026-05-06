@@ -1,55 +1,41 @@
 # Installation & Setup Guide
 
-> Complete guide for installing StealthDOM, configuring AI agent integration,
-> and setting up automatic startup.
-
----
-
-## Quick Install (Windows)
-
-Double-click **`install.bat`** in the StealthDOM folder. It will automatically:
-
-1. Check for Python 3.10+ and install it if missing
-2. Install Python dependencies (`websockets`, `mcp`)
-3. Set up the bridge server to start automatically on login
-4. Start the bridge server right now
-
-**Important:** The installer does *not* automatically inject extensions into your browser or add MCP settings to your IDE. You must complete those steps manually below.
-
-### Uninstall
-
-Double-click **`uninstall.bat`** to cleanly reverse backend changes. This stops the bridge and removes the auto-start task. Python, pip packages, browser extensions, and IDE MCP configs must be removed manually.
-
----
-
-## Manual Install
-
-> The following steps describe the full manual installation process. If you used `install.bat` above, you can skip to [Step 2: Load the Browser Extension](#step-2-load-the-browser-extension).
+Complete guide for installing StealthDOM, configuring AI agent integration, and setting up automatic startup.
 
 ## Prerequisites
 
-- **Python 3.10+** with `pip`
 - **A Chromium-based browser**: Chrome, Brave, Edge, Opera, Vivaldi, etc.
+- **Python 3.10+** with `pip`
 - **Git** (optional, for cloning the repo)
 
----
+## Step 1: Get the Code & Install Dependencies
 
-## Step 1: Download & Install Dependencies
+First, you need to download the StealthDOM project to your computer.
 
-### Clone or download the project
-
+**Option A: Git Clone**
+If you have Git installed, open a terminal and run:
 ```bash
 git clone https://github.com/CodeGenIQ/StealthDOM.git
 cd StealthDOM
 ```
 
-### Install Python dependencies
+**Option B: Download ZIP**
+If you don't use Git, go to the [StealthDOM GitHub repository](https://github.com/CodeGenIQ/StealthDOM), click the green **Code** button, and select **Download ZIP**. Extract the folder to a permanent location on your computer.
 
+### Install Python Dependencies
+
+Once you have the code, you need to install the backend server dependencies.
+
+**Windows Quick Install:**
+Double-click **`install.bat`** in the StealthDOM folder. It will automatically check for Python, install the `websockets` and `mcp` packages, and set up the bridge server to start automatically on login.
+
+**Manual Install (All Platforms):**
+Open a terminal in the StealthDOM folder and run:
 ```bash
 pip install websockets mcp
 ```
 
-That's it — only two packages needed.
+*(To cleanly reverse backend changes made by `install.bat`, you can double-click **`uninstall.bat`**).*
 
 ---
 
@@ -59,34 +45,30 @@ That's it — only two packages needed.
    - **Chrome**: `chrome://extensions`
    - **Brave**: `brave://extensions`
    - **Edge**: `edge://extensions`
-   - **Opera**: `opera://extensions`
 
-2. Enable **Developer Mode** (toggle in the top-right corner)
+2. Enable **Developer Mode** (a toggle usually in the top-right corner).
+3. Click **"Load unpacked"**.
+4. Select the `StealthDOM/extension/` folder you downloaded in Step 1.
+5. The StealthDOM extension should now appear in your list. 
 
-3. Click **"Load unpacked"**
-
-4. Select the `StealthDOM/extension/` folder
-
-5. The StealthDOM extension should appear in your extensions list
+**Tip:** Click the puzzle piece icon next to your address bar and **Pin** the StealthDOM extension so you can easily access its enable/disable toggle.
 
 ### Optional: Enable in Incognito
-
 If you want AI agents to be able to open and control incognito windows:
+1. Click the extension's **Details** button.
+2. Toggle **"Allow in Incognito"** (or "Allow in Private" in some browsers).
 
-1. Click the extension's **Details** button
-2. Toggle **"Allow in Incognito"** (or "Allow in Private" in some browsers)
-
-> **Note:** The extension needs to run on all sites to function as a general-purpose
-> automation tool. If you want to restrict it to specific domains, change "Site Access"
-> in the extension details to "On specific sites."
+> **Note:** The extension needs to run on all sites to function as a general-purpose automation tool. If you want to restrict it to specific domains, change "Site Access" in the extension details to "On specific sites."
 
 ---
 
-## Step 2.5: Browser Shortcut Setup (CRITICAL FOR STEALTH)
+## Step 3: Browser Shortcut Setup (CRITICAL FOR STEALTH)
 
-Because StealthDOM relies on the `chrome.debugger` API for advanced automation features, Chrome will naturally display a yellow infobar saying *"StealthDOM started debugging this browser"* on active tabs. 
+Because StealthDOM relies on the Chrome DevTools Protocol for advanced automation, Chrome will naturally display a yellow infobar saying *"StealthDOM started debugging this browser"* on active tabs. 
 
-To achieve **complete UI stealth** and prevent this bar from drawing attention or disrupting the page layout, you must launch your browser with a specific flag.
+**Why you must disable this:** This yellow bar will disrupt the page layout and draw unwanted attention to the browser. More importantly, it is required for StealthDOM to silently take screenshots in the background and automatically click on native JavaScript pop-ups (`alert`, `confirm`).
+
+To achieve **complete UI stealth**, you must launch your browser with a specific flag:
 
 1. Right-click your Chrome/Brave/Edge desktop shortcut and select **Properties**.
 2. In the **Target** field, add a space at the very end, followed by:
@@ -98,7 +80,7 @@ To achieve **complete UI stealth** and prevent this bar from drawing attention o
 
 ---
 
-## Step 3: Start the Bridge Server
+## Step 4: Start the Bridge Server
 
 The bridge server is the relay between AI agents and the browser extension.
 
@@ -147,7 +129,7 @@ To remove it, right-click **`scripts/windows_startup_uninstall.bat`** → **Run 
 
 ---
 
-## Step 4: Verify the Connection
+## Step 5: Verify the Connection
 
 Once the bridge is running and you have a browser tab open:
 
@@ -174,7 +156,7 @@ Once the bridge is running and you have a browser tab open:
 
 ---
 
-## Step 5: Configure MCP for AI Agents
+## Step 6: Configure MCP for AI Agents
 
 StealthDOM includes a full MCP (Model Context Protocol) server that exposes all 57 commands as tools for AI agents. Below are setup instructions for popular AI-powered IDEs.
 
