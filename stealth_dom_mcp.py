@@ -157,7 +157,7 @@ RULES:
 - Use virtualId (e.g. 'brave:12345') for tab_id in all tab-scoped tools.
 - For iframes: browser_list_frames(tab_id) → pass frame_id to DOM tools.
 
-TOOLS (49):
+TOOLS (50):
 
 DOM Reading (9): browser_query, browser_query_all, browser_get_text,
   browser_get_html, browser_get_attribute, browser_get_bounding_rect,
@@ -188,6 +188,7 @@ Network (3): browser_start_net_capture, browser_stop_net_capture,
 JavaScript (1): browser_evaluate (MAIN or ISOLATED world)
 Frames (2): browser_list_frames, browser_evaluate_all_frames
 File/Fetch (2): browser_upload_file, browser_proxy_fetch
+Dialogs (1): browser_handle_dialog
 """)
 
 
@@ -219,7 +220,7 @@ MCP tools → Bridge (ws://127.0.0.1:9878) → Extension Background → Content 
 | User sessions | Must re-authenticate | Uses existing sessions |
 | TLS fingerprint | Synthetic (detectable) | Real (identical to human) |
 
-## Tool Reference (49 total)
+## Tool Reference (50 total)
 
 ### DOM Reading (9) — accept optional frame_id
 - browser_query — single element by CSS selector
@@ -295,6 +296,9 @@ Use browser_get_bounding_rect to get target coordinates.
 ### File & Fetch (2)
 - browser_upload_file — set file on input[type=file] via data URL
 - browser_proxy_fetch — HTTP request through browser's real TLS fingerprint + cookies
+
+### Dialog Handling (1)
+- browser_handle_dialog — Natively accept or dismiss window.alert, window.confirm, or window.prompt
 
 ## Tips
 - For iframes: browser_list_frames → get frameId → pass frame_id to any DOM tool
@@ -1213,6 +1217,24 @@ async def browser_proxy_fetch(
     if not result.get("success"):
         return f"Error: {result.get('error')}"
     return json.dumps(result.get("data"), indent=2)
+
+
+@mcp.tool()
+async def browser_handle_dialog(tab_id: int | str, accept: bool = True, prompt_text: str | None = None) -> str:
+    """Accept or dismiss a native JavaScript dialog (alert, confirm, prompt).
+    
+    Args:
+        tab_id: ID of the tab (get from browser_list_tabs)
+        accept: True to accept (click OK), False to dismiss (click Cancel)
+        prompt_text: Optional text to enter into a prompt dialog
+    """
+    kwargs = {"tabId": tab_id, "accept": accept}
+    if prompt_text is not None:
+        kwargs["promptText"] = prompt_text
+    result = await send_command("handleDialog", **kwargs)
+    if not result.get("success"):
+        return f"Error: {result.get('error')}"
+    return "Dialog handled successfully"
 
 
 # ==========================================
