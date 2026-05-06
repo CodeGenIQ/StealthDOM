@@ -63,6 +63,16 @@ Because StealthDOM is a browser extension — not an external debugger — it in
 - **Real `chrome.runtime`** — because it IS a real extension
 - **No detectable difference from manual browsing** — because there is none
 
+### Why `chrome.debugger` is Undetectable
+While StealthDOM uses the Chrome DevTools Protocol (CDP) for advanced features like screenshots and native dialog interception, it does so through the `chrome.debugger` extension API rather than launching Chromium with the `--remote-debugging-port` flag. 
+
+This architectural difference is critical for stealth:
+1. **No `webdriver` flag**: Puppeteer/Playwright hardcode `navigator.webdriver = true` when exposing debugging ports. Extension APIs do not.
+2. **Bypasses "Debugger Traps"**: Advanced anti-bot scripts (DataDome, Akamai) often inject `debugger;` statements to measure execution time. If execution halts, they ban you. When StealthDOM attaches to a tab, it only enables the `Page` domain. It specifically **does not** send `Debugger.enable`. Thus, the page ignores the `debugger;` traps completely.
+3. **No CDC Variables**: Traditional automation injects fingerprintable variables (`window.cdc_...`) into the DOM. StealthDOM operates natively via isolated content scripts without dirtying the global scope.
+
+*(Note: Chrome only allows one debugger per tab. If you manually open DevTools (F12) on a tab, StealthDOM is safely detached. It will automatically re-attach on the next AI interaction).*
+
 ---
 
 ## Proof: Zero Detection Across All Major Test Suites
