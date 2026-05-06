@@ -1019,6 +1019,11 @@ async function cmdCaptureScreenshot(tabId) {
         // causing CDP screenshots and mouse events to hang indefinitely.
         // Restore once and leave it — users of this extension expect it.
         const tab = await chrome.tabs.get(tabId);
+        
+        if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:'))) {
+            return { success: false, error: "Screenshots are forbidden on restricted internal browser pages (chrome://, edge://). The browser natively blocks all extension screen capture APIs on these URLs." };
+        }
+
         await ensureWindowNotMinimized(tab.windowId);
 
         // Primary path: CDP via chrome.debugger (no focus-stealing, no quota)
@@ -1081,6 +1086,11 @@ async function cmdCaptureFullPageScreenshot(tabId, maxHeight = 20000) {
 
         // Auto-restore minimized windows (same pattern as cmdCaptureScreenshot)
         const tab = await chrome.tabs.get(tabId);
+
+        if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:'))) {
+            return { success: false, error: "Screenshots are forbidden on restricted internal browser pages (chrome://, edge://). The browser natively blocks all extension screen capture APIs on these URLs." };
+        }
+
         await ensureWindowNotMinimized(tab.windowId);
 
         // Primary path: CDP full-page capture (no scrolling, no focus)
