@@ -127,19 +127,11 @@ When `chrome.debugger.attach()` is called, Chrome shows a yellow "Extension is d
 - The infobar only appears on the window containing the attached tab — if the user is working in a different window or tab (the typical automation scenario), they never see it
 - With on-demand attach/detach (attach → screenshot → detach in <300ms), the bar barely flashes before disappearing
 
-> **Optional:** Chrome supports `--silent-debugger-extension-api` as a launch flag to suppress the bar entirely if desired, but it is not necessary for stealth.
+> **Critical Setup:** While the bar is invisible to the website, it is highly visible to the user. To suppress the bar entirely, users must add `--silent-debugger-extension-api` to their browser shortcut. See the Installation Guide for details.
 
 ### 2. `navigator.webdriver` — Not Applicable ✅
 
-The `chrome.debugger` API does not set `navigator.webdriver`. This detection vector is entirely specific to `--remote-debugging-port`. Even if a future Chrome version added debugger-related properties, the extension can pre-emptively patch them at `document_start` in the MAIN world before any page script runs:
-
-```javascript
-Object.defineProperty(navigator, 'webdriver', {
-    get: () => undefined,
-    configurable: true
-});
-delete Navigator.prototype.webdriver;
-```
+The `chrome.debugger` API does not set `navigator.webdriver`. This detection vector is entirely specific to `--remote-debugging-port`. The property remains natively `false` from the engine level, with no JavaScript overriding or tampering required. Anti-bot scripts that inspect property descriptors for signs of tampering will find a pristine variable.
 
 ### 3. Port Scanning — Not Applicable ✅
 
@@ -195,10 +187,10 @@ JavaScript libraries that re-render the DOM onto a Canvas element. No focus requ
 │  ├── Console capture: Runtime.consoleAPICalled               │
 │  └── DOM snapshots: DOMSnapshot.captureSnapshot              │
 │                                                              │
-│  Anti-Detection Layer (MAIN world, document_start)           │
-│  ├── navigator.webdriver override                            │
-│  ├── Navigator.prototype cleanup                             │
-│  └── Future-proof property patching                          │
+│  Anti-Detection Layer (Engine level)                         │
+│  ├── navigator.webdriver natively false                      │
+│  ├── No Debugger.enable (bypasses debugger; traps)           │
+│  └── Pristine global execution scope                         │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -210,17 +202,20 @@ The key principle: **use CDP only for what the extension API can't do well**, wh
 
 The `debugger` permission is declared in `manifest.json`. No browser launch flags are required.
 
-### Attach/Detach Strategy
+### Persistent Debugger Connection
 
-The debugger is attached **on-demand** and detached immediately after each screenshot, limiting the timing side-channel window to ~100-300ms:
+StealthDOM maintains a **persistent debugger connection** on active tabs. Rather than rapidly attaching and detaching (which is slow and error-prone), the extension attaches once upon the first interaction.
+
+This architecture is necessary to natively intercept synchronous JavaScript dialogs (`alert`, `confirm`, `prompt`) the exact millisecond they open. Because `chrome.debugger.attach()` occurs before interaction, the `Page.javascriptDialogOpening` event is guaranteed to be caught.
 
 ```javascript
-await chrome.debugger.attach({ tabId }, '1.3');   // ~50ms
-const result = await chrome.debugger.sendCommand(  // ~100ms
-    target, 'Page.captureScreenshot', opts
-);
-await chrome.debugger.detach({ tabId });            // ~50ms
+await chrome.debugger.attach({ tabId }, '1.3');
+// Enable the Page domain to catch dialogs and take screenshots
+await chrome.debugger.sendCommand(target, 'Page.enable');
+// We DO NOT enable the Debugger domain (to bypass debugger; traps)
 ```
+
+The connection is only detached if the tab is closed, or if the user manually opens DevTools (F12) on that tab.
 
 ### Graceful Fallback
 

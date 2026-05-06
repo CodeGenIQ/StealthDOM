@@ -82,6 +82,22 @@ If you want AI agents to be able to open and control incognito windows:
 
 ---
 
+## Step 2.5: Browser Shortcut Setup (CRITICAL FOR STEALTH)
+
+Because StealthDOM relies on the `chrome.debugger` API for advanced automation features, Chrome will naturally display a yellow infobar saying *"StealthDOM started debugging this browser"* on active tabs. 
+
+To achieve **complete UI stealth** and prevent this bar from drawing attention or disrupting the page layout, you must launch your browser with a specific flag.
+
+1. Right-click your Chrome/Brave/Edge desktop shortcut and select **Properties**.
+2. In the **Target** field, add a space at the very end, followed by:
+   `--silent-debugger-extension-api`
+3. Click **Apply** and **OK**.
+4. Close *all* open browser windows, and relaunch the browser using that shortcut.
+
+*(Example Target: `"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe" --silent-debugger-extension-api`)*
+
+---
+
 ## Step 3: Start the Bridge Server
 
 The bridge server is the relay between AI agents and the browser extension.
