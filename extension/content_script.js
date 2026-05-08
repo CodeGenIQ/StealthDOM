@@ -557,7 +557,16 @@
 
             const dt = new DataTransfer();
             dt.items.add(file);
-            el.files = dt.files;
+            
+            // Try to use native setter if React overrides it
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'files');
+            if (nativeSetter && nativeSetter.set) {
+                nativeSetter.set.call(el, dt.files);
+            } else {
+                el.files = dt.files;
+            }
+            
+            el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));
 
             return { success: true };

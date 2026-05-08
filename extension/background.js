@@ -465,6 +465,10 @@ async function handleBackgroundCommand(msg) {
             return await cmdMouseDragCDP(msg.tabId, msg.startX, msg.startY, msg.endX, msg.endY, msg.steps, msg.duration);
         case 'mouseWheelCDP':
             return await cmdMouseWheelCDP(msg.tabId, msg.x, msg.y, msg.deltaX, msg.deltaY);
+        case 'keyPressCDP':
+            return await cmdKeyPressCDP(msg.tabId, msg.key, msg.modifiers);
+        case 'keyComboCDP':
+            return await cmdKeyComboCDP(msg.tabId, msg.keys);
 
         // === Cookies ===
         case 'getCookies':
@@ -684,13 +688,13 @@ async function bridgeRouteCommand(msg) {
         'navigate', 'goBack',
         'captureScreenshot', 'captureFullPageScreenshot',
         'mouseMoveCDP', 'mouseClickCDP', 'mouseDownCDP', 'mouseUpCDP', 'mouseDragCDP', 'mouseWheelCDP',
+        'keyPressCDP', 'keyComboCDP',
         'getCookies', 'setCookie', 'deleteCookie', 'listCookieStores',
         'startNetCapture', 'stopNetCapture', 'getNetCapture', 'clearNetCapture',
         'newWindow', 'newIncognitoWindow', 'closeWindow', 'resizeWindow',
         'executeScript', 'executeScriptAllFrames', 'listFrames',
         'enableBlock', 'disableBlock',
-        'ping', 'hover', 'removeByText', 'handleDialog', 'getActiveDialog',
-        'proxyFetch',
+        'ping', 'handleDialog', 'getActiveDialog',
         'waitForUrl',
     ];
 
@@ -780,7 +784,11 @@ if (_enabled) bridgeConnect();
 async function cmdListTabs() {
     const windows = await chrome.windows.getAll();
     const windowIncognito = {};
-    windows.forEach(w => { windowIncognito[w.id] = w.incognito; });
+    const windowStates = {};
+    windows.forEach(w => { 
+        windowIncognito[w.id] = w.incognito; 
+        windowStates[w.id] = w.state; // e.g., 'normal', 'minimized', 'maximized'
+    });
 
     const tabs = await chrome.tabs.query({});
     return {
@@ -791,6 +799,8 @@ async function cmdListTabs() {
             title: t.title,
             active: t.active,
             windowId: t.windowId,
+            windowState: windowStates[t.windowId] || 'unknown',
+            discarded: t.discarded || false,
             cookieStoreId: t.cookieStoreId,
             incognito: windowIncognito[t.windowId] || false,
             index: t.index,
@@ -876,11 +886,18 @@ async function cmdGoBack(tabId) {
 async function cmdCaptureScreenshotCDP(tabId) {
     try {
         const target = await ensureDebuggerAttached(tabId);
-        const result = await chrome.debugger.sendCommand(target, 'Page.captureScreenshot', {
-            format: 'png',
-            quality: 100,
-            fromSurface: true,
-        });
+        
+        // Race against a 3-second timeout. If the window is fully occluded (covered by another maximized window),
+        // Windows DWM tells Chromium to suspend the compositor, causing Page.captureScreenshot to hang.
+        const result = await Promise.race([
+            chrome.debugger.sendCommand(target, 'Page.captureScreenshot', {
+                format: 'png',
+                quality: 100,
+                fromSurface: true,
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('CDP_TIMEOUT')), 3000))
+        ]);
+        
         return {
             success: true,
             data: {
@@ -891,6 +908,9 @@ async function cmdCaptureScreenshotCDP(tabId) {
             }
         };
     } catch (e) {
+        if (e.message === 'CDP_TIMEOUT') {
+            throw new Error('Timeout: The browser window is likely fully occluded (covered by another maximized app), causing the OS to suspend the graphics compositor.');
+        }
         throw e; // Rethrow so caller can fall back to captureVisibleTab
     }
 }
@@ -931,12 +951,16 @@ async function cmdCaptureFullPageScreenshotCDP(tabId, maxHeight = 20000) {
         // Brief pause for re-layout
         await new Promise(r => setTimeout(r, 100));
 
-        const result = await chrome.debugger.sendCommand(target, 'Page.captureScreenshot', {
-            format: 'png',
-            quality: 100,
-            captureBeyondViewport: true,
-            clip: { x: 0, y: 0, width: contentWidth, height: contentHeight, scale: 1 },
-        });
+        // Race against a 5-second timeout for full page capture
+        const result = await Promise.race([
+            chrome.debugger.sendCommand(target, 'Page.captureScreenshot', {
+                format: 'png',
+                quality: 100,
+                captureBeyondViewport: true,
+                clip: { x: 0, y: 0, width: contentWidth, height: contentHeight, scale: 1 },
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('CDP_TIMEOUT')), 5000))
+        ]);
 
         // Reset device metrics to original
         await chrome.debugger.sendCommand(target, 'Emulation.clearDeviceMetricsOverride');
@@ -962,6 +986,9 @@ async function cmdCaptureFullPageScreenshotCDP(tabId, maxHeight = 20000) {
         // Ensure metrics reset on any error
         if (target) {
             try { await chrome.debugger.sendCommand(target, 'Emulation.clearDeviceMetricsOverride'); } catch (_) {}
+        }
+        if (e.message === 'CDP_TIMEOUT') {
+            throw new Error('Timeout: The browser window is likely fully occluded (covered by another maximized app), causing the OS to suspend the graphics compositor.');
         }
         throw e; // Rethrow so caller can fall back to scroll-stitch
     }
@@ -1020,11 +1047,18 @@ async function cmdCaptureScreenshot(tabId) {
         // Restore once and leave it — users of this extension expect it.
         const tab = await chrome.tabs.get(tabId);
         
-        if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:'))) {
-            return { success: false, error: "Screenshots are forbidden on restricted internal browser pages (chrome://, edge://). The browser natively blocks all extension screen capture APIs on these URLs." };
+        if (tab.discarded) {
+            return { success: false, error: 'Sleeping tab. The tab has been suspended by Chrome to save memory. Wake it up with browser_switch_tab or browser_reload.' };
         }
 
-        await ensureWindowNotMinimized(tab.windowId);
+        // --- TEMPORARILY DISABLED FOR TESTING MINIMIZED SCREENSHOTS ---
+        // await ensureWindowNotMinimized(tab.windowId);
+        // 
+        // const winState = await chrome.windows.get(tab.windowId);
+        // if (winState.state === 'minimized') {
+        //     return { success: false, error: 'Window minimized. The browser window could not be auto-restored. Chromium suspends graphics for minimized windows.' };
+        // }
+        // --------------------------------------------------------------
 
         // Primary path: CDP via chrome.debugger (no focus-stealing, no quota)
         try {
@@ -1043,7 +1077,9 @@ async function cmdCaptureScreenshot(tabId) {
 
         // tab and targetWindow already fetched above for auto-restore
         await chrome.tabs.update(tabId, { active: true });
-        await chrome.windows.update(tab.windowId, { focused: true, state: 'normal' });
+        // --- TEMPORARILY DISABLED FOR TESTING MINIMIZED SCREENSHOTS ---
+        // await chrome.windows.update(tab.windowId, { focused: true, state: 'normal' });
+        // --------------------------------------------------------------
         // Brief delay to let the tab render after activation
         await new Promise(r => setTimeout(r, 150));
 
@@ -1064,7 +1100,11 @@ async function cmdCaptureScreenshot(tabId) {
             }
         };
     } catch (e) {
-        return { success: false, error: `Screenshot failed: ${e.message}` };
+        let errMsg = e.message || String(e);
+        if (errMsg.includes('Internal error')) {
+            errMsg += ' (This usually happens if the OS screen is locked, or an RDP session is disconnected, causing the OS to stop drawing windows.)';
+        }
+        return { success: false, error: `Screenshot failed: ${errMsg}` };
     }
 }
 
@@ -1087,11 +1127,17 @@ async function cmdCaptureFullPageScreenshot(tabId, maxHeight = 20000) {
         // Auto-restore minimized windows (same pattern as cmdCaptureScreenshot)
         const tab = await chrome.tabs.get(tabId);
 
-        if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:'))) {
-            return { success: false, error: "Screenshots are forbidden on restricted internal browser pages (chrome://, edge://). The browser natively blocks all extension screen capture APIs on these URLs." };
+        if (tab.discarded) {
+            return { success: false, error: 'Sleeping tab. The tab has been suspended by Chrome to save memory. Wake it up with browser_switch_tab or browser_reload.' };
         }
 
-        await ensureWindowNotMinimized(tab.windowId);
+        // Temporarily disabled: we want to test if CDP can handle minimized windows natively.
+        // await ensureWindowNotMinimized(tab.windowId);
+        //
+        // const winState = await chrome.windows.get(tab.windowId);
+        // if (winState.state === 'minimized') {
+        //     return { success: false, error: 'Window minimized. The browser window could not be auto-restored. Chromium suspends graphics for minimized windows.' };
+        // }
 
         // Primary path: CDP full-page capture (no scrolling, no focus)
         try {
@@ -1108,9 +1154,9 @@ async function cmdCaptureFullPageScreenshot(tabId, maxHeight = 20000) {
         const prevWindowId = prevWindow?.id;
 
         // tab and targetWindow already fetched above for auto-restore
-        await chrome.tabs.update(tabId, { active: true });
-        await chrome.windows.update(tab.windowId, { focused: true, state: 'normal' });
-        await new Promise(r => setTimeout(r, 200));
+        // await chrome.tabs.update(tabId, { active: true });
+        // await chrome.windows.update(tab.windowId, { focused: true, state: 'normal' });
+        // await new Promise(r => setTimeout(r, 200));
 
         // Step 1: Measure page dimensions
         const measureResults = await chrome.scripting.executeScript({
@@ -1316,7 +1362,11 @@ async function cmdCaptureFullPageScreenshot(tabId, maxHeight = 20000) {
                 },
             });
         } catch (_) { /* ignore cleanup errors */ }
-        return { success: false, error: `Full-page screenshot failed: ${e.message}` };
+        let errMsg = e.message || String(e);
+        if (errMsg.includes('Internal error')) {
+            errMsg += ' (This usually happens if the OS screen is locked, or an RDP session is disconnected, causing the OS to stop drawing windows.)';
+        }
+        return { success: false, error: `Full-page screenshot failed: ${errMsg}` };
     }
 }
 
@@ -1342,7 +1392,9 @@ async function ensureWindowNotMinimized(windowId) {
 async function withDebugger(tabId, fn) {
     // Ensure renderer is alive (minimized windows suspend it)
     const tab = await chrome.tabs.get(tabId);
-    await ensureWindowNotMinimized(tab.windowId);
+    // --- TEMPORARILY DISABLED FOR TESTING MINIMIZED INPUT EVENTS ---
+    // await ensureWindowNotMinimized(tab.windowId);
+    // --------------------------------------------------------------
 
     try {
         const target = await ensureDebuggerAttached(tabId);
@@ -1618,6 +1670,140 @@ async function cmdMouseWheelCDP(tabId, x, y, deltaX = 0, deltaY = 0) {
         });
     } catch (e) {
         return { success: false, error: `Mouse wheel failed: ${e.message}` };
+    }
+}
+
+/**
+ * Helper to map standard keys to CDP text/unmodifiedText
+ */
+function getCDPKeyText(key) {
+    if (key.length === 1) return key;
+    if (key === 'Enter') return '\r';
+    if (key === 'Tab') return '\t';
+    if (key === 'Space') return ' ';
+    return '';
+}
+
+/**
+ * CDP keyboard: dispatch native key events.
+ */
+async function cmdKeyPressCDP(tabId, key, modifiers = 0) {
+    if (!tabId) return { success: false, error: 'tabId required' };
+    if (!key) return { success: false, error: 'key required' };
+
+    const text = getCDPKeyText(key);
+
+    try {
+        return await withDebugger(tabId, async (target) => {
+            // 1. rawKeyDown or keyDown
+            await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', {
+                type: text ? 'keyDown' : 'rawKeyDown',
+                key,
+                windowsVirtualKeyCode: 0, // Simplified, Chromium often infers this
+                nativeVirtualKeyCode: 0,
+                text,
+                unmodifiedText: text,
+                modifiers
+            });
+
+            // 2. char (only if text exists and it's not a control key that wouldn't emit char)
+            if (text && key !== 'Enter' && key !== 'Tab') {
+                await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', {
+                    type: 'char',
+                    key,
+                    text,
+                    unmodifiedText: text,
+                    modifiers
+                });
+            }
+
+            // 3. keyUp
+            await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', {
+                type: 'keyUp',
+                key,
+                modifiers
+            });
+
+            return {
+                success: true,
+                data: { key, modifiers, method: 'cdp' }
+            };
+        });
+    } catch (e) {
+        return { success: false, error: `Key press failed: ${e.message}` };
+    }
+}
+
+/**
+ * CDP keyboard combo: dispatch native key events for a combination of keys.
+ */
+async function cmdKeyComboCDP(tabId, keysString) {
+    if (!tabId) return { success: false, error: 'tabId required' };
+    if (!keysString) return { success: false, error: 'keys required' };
+
+    const keys = keysString.split(',').map(k => k.trim());
+    if (keys.length === 0) return { success: false, error: 'invalid keys' };
+
+    // Map common modifier names to CDP modifier bitmask
+    let modifiers = 0;
+    const keySequence = [];
+    
+    for (const key of keys) {
+        const kLower = key.toLowerCase();
+        if (kLower === 'alt') modifiers |= 1;
+        else if (kLower === 'control' || kLower === 'ctrl') modifiers |= 2;
+        else if (kLower === 'meta' || kLower === 'command' || kLower === 'windows') modifiers |= 4;
+        else if (kLower === 'shift') modifiers |= 8;
+        else {
+            keySequence.push(key);
+        }
+    }
+
+    try {
+        return await withDebugger(tabId, async (target) => {
+            // For CDP, modifiers are a bitmask sent with EACH key event.
+            // We just need to dispatch the actual non-modifier keys with the modifiers bitmask set.
+            // But if the user ONLY asked to press a modifier (e.g. 'Shift'), keySequence will be empty.
+            if (keySequence.length === 0) {
+                // Just press the first modifier mentioned
+                await cmdKeyPressCDP(tabId, keys[0], 0); 
+            } else {
+                for (const key of keySequence) {
+                    const text = getCDPKeyText(key);
+                    
+                    await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', {
+                        type: text ? 'keyDown' : 'rawKeyDown',
+                        key,
+                        text,
+                        unmodifiedText: text,
+                        modifiers
+                    });
+
+                    if (text && key !== 'Enter' && key !== 'Tab') {
+                        await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', {
+                            type: 'char',
+                            key,
+                            text,
+                            unmodifiedText: text,
+                            modifiers
+                        });
+                    }
+
+                    await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', {
+                        type: 'keyUp',
+                        key,
+                        modifiers
+                    });
+                }
+            }
+
+            return {
+                success: true,
+                data: { keys: keysString, modifiers, method: 'cdp' }
+            };
+        });
+    } catch (e) {
+        return { success: false, error: `Key combo failed: ${e.message}` };
     }
 }
 

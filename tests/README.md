@@ -13,13 +13,21 @@ The test runner (`test_stealth_dom.py`) connects to the local StealthDOM websock
 
 ## Running the Tests
 
-Ensure the StealthDOM extension is loaded in your browser and the Python bridge server is running, then execute:
+Ensure the StealthDOM extension is loaded in your browser and the Python bridge server (`bridge_server.py`) is running.
 
+### 1. Automated Integration Suite
+Run the standard automated integration tests:
 ```bash
 python test_stealth_dom.py
 ```
-
 Check this directory after execution for the resulting `TEST_REPORT.md` and any generated `*.png` screenshots.
+
+### 2. Interactive Window State Verification Suite
+Run the interactive state verification suite to mathematically prove StealthDOM's headless capabilities across physical OS states (Normal, Occluded, Minimized):
+```bash
+python test_window_states.py
+```
+This script will pause and prompt you to manually manipulate the physical state of your browser window (e.g. minimize it) before executing a battery of tests. It asserts that the window state is strictly maintained before and after every action (proving no unwanted pop-ups occurred). Check this directory for the resulting `STATE_TEST_REPORT.md`.
 
 ### Clean Execution & Window State
 The test suite is designed to be completely non-intrusive.
