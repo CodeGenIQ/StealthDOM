@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>StealthDOM Upload Test</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f0f0f0; }
+        .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        #status { margin-top: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        .trusted { color: green; font-weight: bold; }
+        .untrusted { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>StealthDOM Upload Test</h1>
+        <p>This page tests if file uploads are correctly flagged as "Trusted".</p>
+        <input type="file" id="fileInput" />
+        <div id="status">Waiting for file...</div>
+        <div id="log" style="margin-top: 10px; font-size: 0.8em; color: #666;"></div>
+    </div>
+
+    <script>
+        const input = document.getElementById('fileInput');
+        const status = document.getElementById('status');
+        const log = document.getElementById('log');
+
+        input.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const isTrusted = e.isTrusted;
+            
+            status.innerHTML = `
+                File received: <b>${file ? file.name : 'none'}</b><br>
+                isTrusted: <span class="${isTrusted ? 'trusted' : 'untrusted'}">${isTrusted}</span>
+            `;
+            
+            log.innerHTML += `[${new Date().toLocaleTimeString()}] Change event received. isTrusted: ${isTrusted}<br>`;
+        });
+    </script>
+</body>
+</html>

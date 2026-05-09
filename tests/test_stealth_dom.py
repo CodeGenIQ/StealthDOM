@@ -89,24 +89,28 @@ async def run_diagnostics(ws, tab_id):
 async def find_ready_tab(ws):
     """Find a non-internal tab that has the content script loaded (responds to ping).
     Prefers virtualId for multi-browser support; falls back to numeric id."""
-    r = await bridge_send(ws, "listTabs")
-    tabs = r.get("data", [])
-    for t in tabs:
-        if t["url"].startswith(("chrome://", "brave://", "edge://", "about:")):
-            continue
-        # Use virtualId if available (multi-browser), otherwise fall back to numeric id
-        tab_id = t.get("virtualId") or t["id"]
-        try:
-            ping = await bridge_send(ws, "ping", tabId=tab_id, _timeout=3)
-            if ping.get("success"):
-                t["_use_id"] = tab_id  # Store the ID to use
-                return t
-        except Exception:
-            continue
+    for attempt in range(3):
+        r = await bridge_send(ws, "listTabs")
+        tabs = r.get("data", [])
+        for t in tabs:
+            if t["url"].startswith(("chrome://", "brave://", "edge://", "about:")):
+                continue
+            if not t.get("active"):
+                continue
+            # Use virtualId if available (multi-browser), otherwise fall back to numeric id
+            tab_id = t.get("virtualId") or t["id"]
+            try:
+                ping = await bridge_send(ws, "ping", tabId=tab_id, _timeout=3)
+                if ping.get("success"):
+                    t["_use_id"] = tab_id  # Store the ID to use
+                    return t
+            except Exception:
+                continue
+        await asyncio.sleep(1)
     return None
 
 
-async def ensure_test_tab(ws, url: str):
+async def ensure_test_tab(ws, url: str, active: bool = True):
     """Close any existing matching tab and create a fresh one to clear dangling debuggers."""
     r = await bridge_send(ws, "listTabs")
     tabs = r.get("data", [])
@@ -117,8 +121,9 @@ async def ensure_test_tab(ws, url: str):
             await bridge_send(ws, "closeTab", tabId=tab_id)
             break
             
-    # Create the new tab in the background to prevent focus stealing / un-minimizing
-    r = await bridge_send(ws, "newTab", url=url, active=False)
+    # Create the new tab. Making it active=True prevents Chromium's Memory Saver from 
+    # immediately freezing it, which would block content script injection.
+    r = await bridge_send(ws, "newTab", url=url, active=active)
     if r.get("success"):
         await asyncio.sleep(1.5)
         return r["data"]["tabId"]
@@ -202,8 +207,12 @@ class TestResults:
         if current_test is not None:
             test_blocks.append((current_test, current_block))
 
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         with open(report_path, "w", encoding="utf-8") as f:
             f.write("# StealthDOM Test Suite Report\n\n")
+            f.write(f"**Date:** {timestamp}\n\n")
             f.write(f"**Results:** {self.passed}/{total} passed, {self.failed} failed\n\n")
             
             if self.errors:
@@ -301,20 +310,19 @@ async def test_explicit_tab_targeting(results: TestResults):
         tab_id = tab["id"]
         results.ok(f"Using tab {tab_id}: {tab['url'][:60]}")
         
-        # Test getTitle with explicit tabId
-        r = await bridge_send(ws, "getTitle", tabId=tab_id)
-        # getTitle is a content script command, so it goes through bridgeForwardToContentScript
+        # Test evaluate with explicit tabId
+        r = await bridge_send(ws, "evaluate", tabId=tab_id, code="document.title")
         if r.get("success"):
-            results.ok(f"getTitle with explicit tabId returned: {r['data'][:50]}")
+            results.ok(f"evaluate with explicit tabId returned: {str(r['data'])[:50]}")
         else:
-            results.fail("getTitle with explicit tabId", r.get("error"))
+            results.fail("evaluate with explicit tabId", r.get("error"))
         
-        # Test getURL with explicit tabId
-        r = await bridge_send(ws, "getURL", tabId=tab_id)
+        # Test evaluate URL with explicit tabId
+        r = await bridge_send(ws, "evaluate", tabId=tab_id, code="window.location.href")
         if r.get("success"):
-            results.ok(f"getURL with explicit tabId returned: {r['data'][:60]}")
+            results.ok(f"evaluate URL with explicit tabId returned: {str(r['data'])[:60]}")
         else:
-            results.fail("getURL with explicit tabId", r.get("error"))
+            results.fail("evaluate URL with explicit tabId", r.get("error"))
         
     except Exception as e:
         results.fail("Explicit targeting", str(e))
@@ -399,8 +407,8 @@ async def test_parallel_commands(results: TestResults):
                 await conn.close()
         
         tasks = [
-            run_command("getTitle"),
-            run_command("getURL"),
+            run_command("evaluate", code="document.title"),
+            run_command("evaluate", code="window.location.href"),
             run_command("listTabs"),
         ]
         
@@ -420,10 +428,8 @@ async def test_parallel_commands(results: TestResults):
         if all_ok:
             # Verify response types are correct
             for action, resp in results_list:
-                if action == "getTitle":
-                    assert isinstance(resp["data"], str), "getTitle should return string"
-                elif action == "getURL":
-                    assert isinstance(resp["data"], str), "getURL should return string"
+                if action == "evaluate":
+                    assert isinstance(resp["data"], str), "evaluate should return string for title/href"
                 elif action == "listTabs":
                     assert isinstance(resp["data"], list), "listTabs should return list"
             results.ok("All parallel commands returned correct response types (no cross-talk)")
@@ -1162,7 +1168,7 @@ async def test_tab_lifecycle(results: TestResults):
 
         # Verify it exists in listTabs
         r = await bridge_send(ws, "listTabs")
-        tab_ids = [t["id"] for t in r["data"]]
+        tab_ids = [t.get("virtualId") or t["id"] for t in r["data"]]
         assert created_tab_id in tab_ids, "New tab not in listTabs"
         results.ok("New tab found in listTabs")
 
@@ -1712,6 +1718,107 @@ async def test_handle_dialog(results: TestResults):
     finally:
         await ws.close()
 
+async def test_wait_for_condition(results: TestResults):
+    """Test that waitForCondition natively waits for truthy result."""
+    print("\n[Test: Wait For Condition (v3.3.0)]")
+    ws = await websockets.connect(BRIDGE_URL)
+    try:
+        # Create a blank tab
+        tab_id = await ensure_test_tab(ws, "https://example.com")
+        if not tab_id:
+            results.fail("Wait For Condition", "Could not open example.com tab")
+            return
+
+        # Start waitForCondition (will block)
+        code = "return document.querySelectorAll('div.ready').length > 0;"
+        
+        # Inject the condition to be fulfilled after 1 second
+        async def inject_delayed():
+            await asyncio.sleep(1)
+            async with websockets.connect(BRIDGE_URL) as ws2:
+                await bridge_send(ws2, "evaluate", tabId=tab_id, code="document.body.innerHTML += '<div class=\"ready\">Ready</div>'")
+            
+        asyncio.create_task(inject_delayed())
+
+        # Wait for the condition
+        r = await bridge_send(ws, "waitForCondition", tabId=tab_id, code=code, _timeout=5)
+        
+        if r.get("success"):
+            results.ok("waitForCondition correctly returned when condition became true")
+        else:
+            results.fail("Wait For Condition", r.get("error"))
+            
+        # Test timeout case
+        r = await bridge_send(ws, "waitForCondition", tabId=tab_id, code="return false;", timeout=1000, _timeout=3)
+        if not r.get("success") and "Timeout waiting for condition" in r.get("error", ""):
+            results.ok("waitForCondition correctly timed out")
+        else:
+            results.fail("Wait For Condition Timeout", f"Expected rejection, got: {r}")
+
+    except Exception as e:
+        results.fail("Wait For Condition", str(e))
+    finally:
+        await ws.close()
+
+async def test_handle_dialog(results: TestResults):
+    """Test that we can handle native JS dialogs."""
+    print("\n[Test: Handle Native Dialogs]")
+    ws = await websockets.connect(BRIDGE_URL)
+    try:
+        # Create a local test URL
+        test_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_dialog.html")
+        test_url = f"file:///{test_path.replace(chr(92), '/')}"
+        
+        tab_id = await ensure_test_tab(ws, test_url)
+        if not tab_id:
+            results.fail("Handle Dialogs", "Could not open test dialog tab")
+            return
+            
+        # Dialogs only show properly (and can be dismissed via keys) on active tabs
+        await bridge_send(ws, "switchTab", tabId=tab_id)
+        await asyncio.sleep(0.5)
+            
+        # 1. Alert test
+        # Click the button which has a setTimeout to trigger alert
+        await bridge_send(ws, "click", tabId=tab_id, selector="#alertBtn")
+        await asyncio.sleep(0.3)  # wait for setTimeout
+        r = await bridge_send(ws, "handleDialog", tabId=tab_id, accept=True)
+        if r.get("success"):
+            results.ok("Dismissed window.alert correctly")
+        else:
+            results.fail("Alert dismiss", r.get("error"))
+
+        # 2. Confirm test (dismiss / false)
+        await bridge_send(ws, "click", tabId=tab_id, selector="#confirmBtn")
+        await asyncio.sleep(0.3)
+        r = await bridge_send(ws, "handleDialog", tabId=tab_id, accept=False)
+        if r.get("success"):
+            eval_r = await bridge_send(ws, "evaluate", tabId=tab_id, code="window.testConfirmResult")
+            if eval_r.get("data") is False:
+                results.ok("Dismissed window.confirm (returned false)")
+            else:
+                results.fail("Confirm dismiss", f"Expected false, got {eval_r.get('data')}")
+        else:
+            results.fail("Confirm dismiss", r.get("error"))
+            
+        # 3. Prompt test
+        await bridge_send(ws, "click", tabId=tab_id, selector="#promptBtn")
+        await asyncio.sleep(0.3)
+        r = await bridge_send(ws, "handleDialog", tabId=tab_id, accept=True, promptText="StealthBot")
+        if r.get("success"):
+            eval_r = await bridge_send(ws, "evaluate", tabId=tab_id, code="window.testPromptResult")
+            if eval_r.get("data") == "StealthBot":
+                results.ok("Accepted window.prompt with text correctly")
+            else:
+                results.fail("Prompt accept", f"Expected 'StealthBot', got {eval_r.get('data')}")
+        else:
+            results.fail("Prompt accept", r.get("error"))
+            
+    except Exception as e:
+        results.fail("Handle Dialogs", str(e))
+    finally:
+        await ws.close()
+
 # ==========================================
 # Runner
 # ==========================================
@@ -1820,6 +1927,9 @@ async def run_all_tests():
 
     # Dialog Handling
     await test_handle_dialog(results)
+
+    # Wait For Condition
+    await test_wait_for_condition(results)
 
     success = results.summary()
 

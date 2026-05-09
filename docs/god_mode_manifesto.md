@@ -1,4 +1,8 @@
-# StealthDOM 2.0: The "God Mode" Manifesto
+# StealthDOM: The "God Mode" Manifesto
+
+> [!NOTE]
+> **Implementation Status:** Pillar A (The Sequence Engine) is **fully shipped** as `browser_execute_sequence`.
+> Pillars B (Script Interception) and C (Semantic Differential) are **future roadmap items** — not yet implemented.
 
 ## 1. Vision & Goal
 The objective of StealthDOM 2.0 is to move from **Passive Browser Control** (where an agent micromanages every click) to **Active Environment Instrumentation**. This achieves two things:

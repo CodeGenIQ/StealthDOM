@@ -108,7 +108,6 @@ These scores are identical to a human manually browsing. Playwright, even with s
 ### What StealthDOM Can't Do (Yet)
 
 - **No headless mode** — requires a visible browser window (can be minimized)
-- **No multi-browser orchestration** — one browser instance at a time per bridge
 - **No built-in waiting strategies** — you manage retries and polling yourself (or let your AI agent handle it)
 
 These are acceptable trade-offs. If you need headless, parallel browser farms, Playwright is the right tool. If you need to automate sites that detect and block bots — which is increasingly every site — StealthDOM is the only tool that works.
@@ -190,7 +189,7 @@ result = await send(ws, "querySelector",
     frameId=frames["data"]["frames"][1]["frameId"])
 ```
 
-For the complete API with all 57 MCP tools and WebSocket commands, see the [API Reference](03_api_reference.md).
+For the complete API with all 50 MCP tools and WebSocket commands, see the [API Reference](03_api_reference.md).
 
 ---
 

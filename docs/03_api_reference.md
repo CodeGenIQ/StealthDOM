@@ -18,6 +18,34 @@ Each command shows:
 
 ---
 
+## God Mode
+
+### executeSequence (Batching Engine)
+Execute multiple actions sequentially with zero latency. If a step fails, the sequence halts. Actions inherit the root `tabId` if they do not provide their own. Page navigations within a sequence are natively handled by the StealthDOM bridge.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `sequence` | array | ✅ | — | List of action objects. See examples below. |
+
+```json
+// Example: Login sequence in a single payload
+{
+  "action": "executeSequence",
+  "tabId": "label:windowId:tabId:frameId",
+  "sequence": [
+    { "action": "type", "selector": "#username", "text": "admin" },
+    { "action": "type", "selector": "#password", "text": "secret" },
+    { "action": "click", "selector": "#login-btn" },
+    { "action": "waitForUrl", "pattern": "*dashboard*" }
+  ]
+}
+```
+
+- **MCP Tool:** `browser_execute_sequence`
+- **Handled by:** Background Script + Content Scripts
+
+---
+
 ## DOM Queries
 
 ### querySelector
@@ -47,7 +75,7 @@ Query all matching DOM elements. Returns count and element details array.
 { "action": "querySelectorAll", "selector": ".message" }
 { "action": "querySelectorAll", "selector": "div", "limit": 20 }
 ```
-**MCP Tool:** `browser_query_all(tab_id, selector, limit=0, frame_id=None)`  
+**MCP Tool:** `browser_query(tab_id, selector, limit=0, frame_id=None)` — pass `limit=0` to get all matches
 **Handled by:** Content Script
 
 ---
@@ -62,7 +90,7 @@ Get the inner text content of a DOM element.
 ```json
 { "action": "getInnerText", "selector": "#content" }
 ```
-**MCP Tool:** `browser_get_text(tab_id, selector, frame_id=None)`  
+**MCP Tool:** `browser_read_content(tab_id, selector, content_type='text', frame_id=None)`  
 **Handled by:** Content Script
 
 ---
@@ -79,7 +107,7 @@ Get the outer HTML of a DOM element.
 { "action": "getOuterHTML", "selector": "#form" }
 { "action": "getOuterHTML", "selector": "body", "maxLength": 5000 }
 ```
-**MCP Tool:** `browser_get_html(tab_id, selector, max_length=0, frame_id=None)`  
+**MCP Tool:** `browser_read_content(tab_id, selector, content_type='html', max_length=0, frame_id=None)`  
 **Handled by:** Content Script
 
 ---
@@ -159,7 +187,7 @@ Wait for a DOM element to appear. Polls every 200ms.
 ```json
 { "action": "waitForSelector", "selector": ".loaded", "timeout": 10000 }
 ```
-**MCP Tool:** `browser_wait_for(tab_id, selector, timeout=10000, frame_id=None)`  
+**MCP Tool:** `browser_wait(tab_id, selector, wait_type='selector', timeout=10000, frame_id=None)`  
 **Handled by:** Content Script
 
 ---
@@ -181,6 +209,23 @@ Wait for an element to contain specific text. Polls every 200ms.
 
 ---
 
+### waitForCondition
+Evaluate a JavaScript snippet natively in the `MAIN` world on every DOM mutation until it returns truthy. 
+Ideal for complex UI state conditions that can't be expressed via simple selectors.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `code` | string | ✅ | — | JavaScript code to evaluate (must return truthy) |
+| `timeout` | integer | — | 10000 | Maximum wait time in milliseconds |
+
+```json
+{ "action": "waitForCondition", "code": "return document.querySelectorAll('.item').length > 5", "timeout": 10000 }
+```
+**MCP Tool:** `browser_wait(tab_id, condition_code, wait_type='condition', timeout=10000, frame_id=None)`  
+**Handled by:** Background Script (native `MAIN` world injection)
+
+---
+
 ### getPageText
 Get the full visible text content of the current page.
 
@@ -191,7 +236,7 @@ Get the full visible text content of the current page.
 ```json
 { "action": "getPageText" }
 ```
-**MCP Tool:** `browser_get_page_text(tab_id, max_length=0, frame_id=None)`  
+**MCP Tool:** `browser_read_content(tab_id, max_length=0, content_type='text')`  
 **Handled by:** Content Script
 
 ---
@@ -207,7 +252,7 @@ Get the full HTML of the current page.
 { "action": "getPageHTML" }
 { "action": "getPageHTML", "maxLength": 50000 }
 ```
-**MCP Tool:** `browser_get_page_html(tab_id, max_length=0, frame_id=None)`  
+**MCP Tool:** `browser_read_content(tab_id, max_length=0, content_type='html')`  
 **Handled by:** Content Script
 
 ---
@@ -273,6 +318,24 @@ Clear and fill a form input or contenteditable element with new text.
 ```
 **MCP Tool:** `browser_fill(tab_id, selector, value, frame_id=None)`  
 **Handled by:** Content Script
+
+---
+
+### insertTextCDP (Paste)
+Instantly paste massive text payloads natively via CDP. Bypasses the deprecated `execCommand` and avoids slow keystroke loops. Ideal for injecting large 10K+ token prompts.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `tabId` | integer or string | ✅ | — | Tab ID (numeric or virtualId) |
+| `text` | string | ✅ | — | Text to paste |
+| `selector` | string | — | — | Optional CSS selector to focus before pasting |
+| `frameId` | string | — | — | Optional frame ID for the selector focus |
+
+```json
+{ "action": "insertTextCDP", "tabId": "brave:42:123", "text": "Very long prompt...", "selector": "#prompt-input" }
+```
+**MCP Tool:** `browser_paste(tab_id, text, selector=None, frame_id=None)`  
+**Handled by:** Background (CDP) + Content Script (for focus)
 
 ---
 
@@ -348,7 +411,7 @@ Scroll the page to specific coordinates.
 ```json
 { "action": "scrollTo", "x": 0, "y": 500 }
 ```
-**MCP Tool:** `browser_scroll_to(tab_id, x=0, y=0, frame_id=None)`  
+**MCP Tool:** *WebSocket only — use `browser_evaluate(tab_id, 'window.scrollTo(x, y)')`*  
 **Handled by:** Content Script
 
 ---
@@ -586,16 +649,18 @@ List all open browser tabs with their IDs, URLs, titles, active status, windowId
 ---
 
 ### newTab
-Open a new browser tab.
+Open a new browser tab. Accepts an optional window ID to route creation to a specific browser or window.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `url` | string | — | `about:blank` | URL to open |
+| `windowId` | integer or string | — | — | Target window ID or virtual window ID (e.g., `brave:42`) |
+| `forceRestore` | boolean | — | `false` | If true, forcefully un-minimizes the window before opening the tab |
 
 ```json
-{ "action": "newTab", "url": "https://example.com" }
+{ "action": "newTab", "url": "https://example.com", "windowId": "brave:42" }
 ```
-**MCP Tool:** `browser_new_tab(url="about:blank")`  
+**MCP Tool:** `browser_new_tab(url="about:blank", window_id=None, force_restore=False)`  
 **Handled by:** Background
 
 ---
@@ -626,6 +691,21 @@ Switch to (activate) a browser tab and focus its window.
 { "action": "switchTab", "tabId": 123 }
 ```
 **MCP Tool:** `browser_switch_tab(tab_id)`  
+**Handled by:** Background
+
+---
+
+### discardTab
+Forcefully put a background tab into Memory Saver (sleeping) mode.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `tabId` | integer or string | ✅ | — | Tab ID (numeric or virtualId like `"chrome:12345"`) |
+
+```json
+{ "action": "discardTab", "tabId": 123 }
+```
+**MCP Tool:** `browser_discard_tab(tab_id)`  
 **Handled by:** Background
 
 ---
@@ -700,7 +780,7 @@ Resize a browser window.
 ## Screenshots
 
 ### captureScreenshot
-Capture a screenshot of a specific tab as PNG. Uses CDP (`chrome.debugger`) for silent capture — no tab activation or window focus required. Falls back to `captureVisibleTab` if CDP is unavailable (e.g., DevTools is open on the target tab).
+Capture a screenshot of a specific tab as PNG. Uses CDP (`chrome.debugger`) for silent capture — no tab activation or window focus required.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -712,12 +792,12 @@ Capture a screenshot of a specific tab as PNG. Uses CDP (`chrome.debugger`) for 
 ```
 **MCP Tool:** `browser_screenshot(tab_id, absolute_save_path)`  
 The MCP tool saves the PNG to the specified `absolute_save_path` on disk and returns the file path.
-**Handled by:** Background (CDP primary, captureVisibleTab fallback)
+**Handled by:** Background (CDP)
 
 ---
 
 ### captureFullPageScreenshot
-Capture a full-page screenshot. Uses CDP single-shot rendering when available — captures the entire page in one pass without scrolling. Falls back to scroll-and-stitch via `captureVisibleTab` if CDP is unavailable. Sticky/fixed elements are automatically hidden during middle frames in the fallback path.
+Capture a full-page screenshot. Uses CDP single-shot rendering — captures the entire page in one pass without scrolling.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -731,7 +811,7 @@ Capture a full-page screenshot. Uses CDP single-shot rendering when available �
 ```
 **MCP Tool:** `browser_screenshot_full_page(tab_id, absolute_save_path, max_height=20000)`  
 Saves the PNG to the specified `absolute_save_path` on disk and returns the file path with dimensions info.
-**Handled by:** Background (CDP primary, scroll-stitch fallback)
+**Handled by:** Background (CDP)
 
 ---
 
@@ -762,7 +842,7 @@ Set a cookie.
 ```json
 { "action": "setCookie", "details": { "url": "https://example.com", "name": "token", "value": "abc123" } }
 ```
-**MCP Tool:** `browser_set_cookie(url, name, value, ...)`  
+**MCP Tool:** `browser_set_cookie(url, name, value, domain=None, path='/', secure=None, http_only=None, expiration_date=None)`  
 **Handled by:** Background
 
 ---
@@ -785,7 +865,7 @@ Delete a cookie.
 
 ## JavaScript Execution
 
-### evaluate
+### executeScript
 Execute arbitrary JavaScript code in the current page's MAIN world context. Works on **all sites** — CSP headers are automatically stripped.
 
 | Parameter | Type | Required | Default | Description |
@@ -796,9 +876,9 @@ Execute arbitrary JavaScript code in the current page's MAIN world context. Work
 Supports both expressions and return statements:
 
 ```json
-{ "action": "evaluate", "code": "document.title" }
-{ "action": "evaluate", "code": "return document.querySelectorAll('a').length" }
-{ "action": "evaluate", "code": "return [...document.querySelectorAll('a')].map(a => a.href)" }
+{ "action": "executeScript", "code": "document.title" }
+{ "action": "executeScript", "code": "return document.querySelectorAll('a').length" }
+{ "action": "executeScript", "code": "return [...document.querySelectorAll('a')].map(a => a.href)" }
 ```
 **MCP Tool:** `browser_evaluate(tab_id, code, world='MAIN')`  
 **Handled by:** Background (via `chrome.scripting.executeScript`)
@@ -931,11 +1011,12 @@ Set files on a file input element using a data URL.
 |-----------|------|----------|---------|-------------|
 | `selector` | string | ✅ | — | CSS selector of `input[type=file]` |
 | `dataUrl` | string | ✅ | — | Data URL of the file (e.g., `data:image/png;base64,...`) |
+| `filename` | string | — | — | Optional filename (e.g. `image.png`). Defaults to derived extension. |
 
 ```json
 { "action": "setInputFiles", "selector": "input[type=file]", "dataUrl": "data:image/png;base64,..." }
 ```
-**MCP Tool:** `browser_upload_file(tab_id, selector, data_url)`  
+**MCP Tool:** `browser_upload_file(tab_id, selector, data_url, filename=None)`  
 **Handled by:** Content Script
 
 ---
@@ -969,7 +1050,7 @@ Pattern can be a substring (e.g., '/dashboard') or a regex (e.g., '/order/[0-9]+
 ```json
 { "action": "waitForUrl", "pattern": "/dashboard", "timeout": 15000 }
 ```
-**MCP Tool:** `browser_wait_for_url(tab_id, pattern, timeout=10000)`  
+**MCP Tool:** `browser_wait(tab_id, pattern, wait_type='url', timeout=10000)`  
 **Handled by:** Background Script
 
 ---
@@ -1028,6 +1109,27 @@ Remove DOM elements that match a selector and contain specific text.
 **Handled by:** Content Script
 
 ---
+
+## Settings
+
+### toggleAssetBlocking
+Instantly block tracking pixels, analytics, heavy fonts, and optionally images using Declarative Net Request (DNR). This applies globally across the browser profile for ultimate speed and stealth.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `enable` | boolean | ✅ | — | True to enable blocking |
+| `blockFonts` | boolean | — | `true` | Block heavy font requests |
+| `blockImages` | boolean | — | `false` | Block image requests |
+| `blockTrackers` | boolean | — | `true` | Block analytics and trackers |
+
+```json
+{ "action": "toggleAssetBlocking", "enable": true }
+```
+**MCP Tool:** `browser_toggle_asset_blocking(enable, block_fonts=True, block_images=False, block_trackers=True)`  
+**Handled by:** Background (DNR)
+
+---
+
 
 ## Lifecycle
 

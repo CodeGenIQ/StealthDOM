@@ -94,7 +94,7 @@ async def get_bridge() -> websockets.ClientConnection:
                 _ws = None
         
         try:
-            _ws = await websockets.connect(BRIDGE_URL)
+            _ws = await websockets.connect(BRIDGE_URL, max_size=50_000_000)
             logger.info("Connected to bridge at %s", BRIDGE_URL)
             # Start reader task if not running
             if _reader_task is None or _reader_task.done():
@@ -158,27 +158,25 @@ RULES:
 
 TOOLS (50):
 
-DOM Reading (9): browser_query, browser_query_all, browser_get_text,
-  browser_get_html, browser_get_attribute, browser_get_bounding_rect,
-  browser_wait_for, browser_get_page_text, browser_get_page_html
+God Mode (1): browser_execute_sequence
 
-DOM Interaction (8): browser_click, browser_type, browser_fill, browser_press,
-  browser_key_combo, browser_select, browser_scroll_into_view, browser_hover
+DOM Reading (4): browser_query, browser_read_content, browser_get_attribute,
+  browser_get_bounding_rect
+
+DOM Interaction (9): browser_click, browser_type, browser_fill, browser_press,
+  browser_key_combo, browser_select, browser_scroll_into_view, browser_hover,
+  browser_paste
 
 Mouse via CDP (6) — coordinate-based, isTrusted:true, uses chrome.debugger:
   browser_mouse_move, browser_mouse_click, browser_mouse_down, browser_mouse_up,
   browser_mouse_drag, browser_mouse_wheel
   Use browser_get_bounding_rect to get coordinates first.
 
-Keyboard via CDP (2) — native key dispatch, isTrusted:true:
-  browser_key_press_cdp, browser_key_combo_cdp
+Navigation (4): browser_navigate, browser_back, browser_reload, browser_wait
 
-Navigation (5): browser_navigate, browser_back, browser_reload,
-  browser_scroll_to, browser_wait_for_url
-
-Tab/Window (8): browser_list_tabs, browser_new_tab, browser_close_tab,
-  browser_switch_tab, browser_new_window, browser_new_incognito_window,
-  browser_close_window, browser_resize_window
+Tab/Window (9): browser_list_tabs, browser_new_tab, browser_close_tab,
+  browser_discard_tab, browser_switch_tab, browser_new_window,
+  browser_new_incognito_window, browser_close_window, browser_resize_window
 
 Screenshots (2): browser_screenshot, browser_screenshot_full_page
 
@@ -189,8 +187,9 @@ Network (3): browser_start_net_capture, browser_stop_net_capture,
 
 JavaScript (1): browser_evaluate (MAIN or ISOLATED world)
 Frames (2): browser_list_frames, browser_evaluate_all_frames
-File/Fetch (2): browser_upload_file, browser_proxy_fetch
-Dialogs (1): browser_handle_dialog
+File/Fetch (3): browser_upload_file, browser_upload_file_cdp, browser_proxy_fetch
+Dialogs (2): browser_handle_dialog, browser_get_dialog
+Settings (1): browser_toggle_asset_blocking
 """)
 
 
@@ -210,7 +209,8 @@ MCP tools → Bridge (ws://127.0.0.1:9878) → Extension Background → Content 
 
 - Port 9877: Extension connects (multiple browsers supported simultaneously)
 - Port 9878: MCP server / control clients connect
-- Tab IDs are virtualised as "label:tabId" (e.g. "brave:12345") for multi-browser routing
+- Tab IDs are virtualised as "label:windowId:tabId" (e.g. "brave:43:12345") for multi-browser routing and immediate topology context
+- Frame IDs are virtualised as "label:windowId:tabId:frameId" (e.g. "brave:43:12345:1.4")
 - Content scripts are injected ON-DEMAND via chrome.scripting.executeScript when the first command targets a tab
 
 ## Why StealthDOM?
@@ -222,23 +222,22 @@ MCP tools → Bridge (ws://127.0.0.1:9878) → Extension Background → Content 
 | User sessions | Must re-authenticate | Uses existing sessions |
 | TLS fingerprint | Synthetic (detectable) | Real (identical to human) |
 
-## Tool Reference (50 total)
+## Tool Reference (47 total)
 
-### DOM Reading (9) — accept optional frame_id
-- browser_query — single element by CSS selector
-- browser_query_all — multiple elements (with limit)
-- browser_get_text — inner text of element
-- browser_get_html — outer HTML (with max_length)
+### God Mode (1)
+- browser_execute_sequence — Batching engine. Execute multiple actions sequentially with zero latency (e.g. click, type, wait, fill).
+
+### DOM Reading (4) — accept optional frame_id
+- browser_query — single or multiple elements by CSS selector (with limit)
+- browser_read_content — read inner text or outer HTML of an element or full page
 - browser_get_attribute — specific attribute value
 - browser_get_bounding_rect — position and size (use for Mouse CDP coordinates)
-- browser_wait_for — poll for element appearance (timeout)
-- browser_get_page_text — full page visible text
-- browser_get_page_html — full page HTML source
 
-### DOM Interaction (8) — accept optional frame_id
+### DOM Interaction (9) — accept optional frame_id
 - browser_click — click element (auto-scrolls into view)
 - browser_type — append text to input/contenteditable
 - browser_fill — clear and set value (triggers React onChange)
+- browser_paste — instantly paste massive text payloads via CDP
 - browser_press — single key press (Enter, Tab, Escape, etc.)
 - browser_key_combo — key combination (comma-separated: 'Control,Shift,d')
 - browser_select — dropdown option by value
@@ -255,18 +254,18 @@ Use browser_get_bounding_rect to get target coordinates.
 - browser_mouse_drag — full drag: down → move × N → up (single debugger session)
 - browser_mouse_wheel — native scroll at coordinates (delta_x, delta_y)
 
-### Navigation (5)
+### Navigation (4)
 - browser_navigate — go to URL
 - browser_back — history back
 - browser_reload — reload page
-- browser_scroll_to — scroll to pixel coordinates (x, y)
-- browser_wait_for_url — wait for URL to match pattern (substring or regex)
+- browser_wait — wait for DOM element, JS condition, or URL change
 
-### Tab Management (4)
+### Tab Management (5)
 - browser_list_tabs — all tabs from all connected browsers (includes URL, title, windowId)
-- browser_new_tab — open new tab
+- browser_new_tab — open new tab (accepts optional window_id for specific browser routing)
 - browser_close_tab — close tab
 - browser_switch_tab — activate tab and focus window
+- browser_discard_tab — puts a background tab into Memory Saver (sleeping) mode
 
 ### Window Management (4)
 - browser_new_window — new window with user session
@@ -299,7 +298,11 @@ Use browser_get_bounding_rect to get target coordinates.
 - browser_upload_file — set file on input[type=file] via data URL
 - browser_proxy_fetch — HTTP request through browser's real TLS fingerprint + cookies
 
-### Dialog Handling (1)
+### Settings (1)
+- browser_toggle_asset_blocking — block fonts, trackers, and optionally images globally via DNR
+
+### Dialog Handling (2)
+- browser_get_dialog — Check if there is an active native JavaScript dialog (alert, confirm, prompt)
 - browser_handle_dialog — Natively accept or dismiss window.alert, window.confirm, or window.prompt
 
 ## Tips
@@ -318,15 +321,17 @@ Use browser_get_bounding_rect to get target coordinates.
 # ==========================================
 
 @mcp.tool()
-async def browser_query(tab_id: int | str, selector: str, frame_id: str | None = None) -> str:
-    """Query a single DOM element by CSS selector. Returns element details (tag, id, class, text, visibility).
+async def browser_query(tab_id: int | str, selector: str, limit: int = 1, frame_id: str | None = None) -> str:
+    """Query DOM elements by CSS selector. Returns element details (tag, id, class, text, visibility).
     
     Args:
         selector: CSS selector (e.g., '#my-id', '.my-class', 'div.container > p')
+        limit: Maximum number of elements to return (default 1, use 0 for all matching elements)
     """
-    kwargs = dict(tabId=tab_id, selector=selector)
+    kwargs = dict(tabId=tab_id, selector=selector, limit=limit)
     if frame_id is not None: kwargs['frameId'] = frame_id
-    result = await send_command("querySelector", **kwargs)
+    action = "querySelector" if limit == 1 else "querySelectorAll"
+    result = await send_command(action, **kwargs)
     if not result.get("success"):
         return f"Error: {result.get('error', 'Unknown error')}"
     data = result.get("data")
@@ -337,56 +342,34 @@ async def browser_query(tab_id: int | str, selector: str, frame_id: str | None =
 
 
 @mcp.tool()
-async def browser_query_all(tab_id: int | str, selector: str, limit: int = 0, frame_id: str | None = None) -> str:
-    """Query all DOM elements matching a CSS selector. Returns list of element details.
+async def browser_read_content(tab_id: int | str, selector: str | None = None, content_type: str = 'text', max_length: int = 0, frame_id: str | None = None) -> str:
+    """Read text or HTML content from a specific element or the entire page.
     
     Args:
-        selector: CSS selector
-        limit: Maximum number of elements to return (default 0 = all)
-    """
-    kwargs = dict(tabId=tab_id, selector=selector, limit=limit)
-    if frame_id is not None: kwargs['frameId'] = frame_id
-    result = await send_command("querySelectorAll", **kwargs)
-    if not result.get("success"):
-        return f"Error: {result.get('error')}"
-    return json.dumps(result.get("data"), indent=2)
-
-
-@mcp.tool()
-async def browser_get_text(tab_id: int | str, selector: str, frame_id: str | None = None) -> str:
-    """Get the inner text content of a DOM element.
-    
-    Args:
-        selector: CSS selector
-    """
-    kwargs = dict(tabId=tab_id, selector=selector)
-    if frame_id is not None: kwargs['frameId'] = frame_id
-    result = await send_command("getInnerText", **kwargs)
-    if not result.get("success"):
-        return f"Error: {result.get('error')}"
-    data = result.get("data")
-    if isinstance(data, dict):
-        return data.get("text", "")
-    return str(data) if data is not None else ""
-
-
-@mcp.tool()
-async def browser_get_html(tab_id: int | str, selector: str, max_length: int = 0, frame_id: str | None = None) -> str:
-    """Get the outer HTML of a DOM element.
-    
-    Args:
-        selector: CSS selector
+        selector: Optional CSS selector. If omitted, reads the entire page.
+        content_type: 'text' (default) for visible text, or 'html' for raw HTML.
         max_length: Maximum characters to return (default 0 = no limit)
     """
-    kwargs = dict(tabId=tab_id, selector=selector, maxLength=max_length)
+    kwargs = dict(tabId=tab_id, maxLength=max_length)
+    if selector is not None: kwargs['selector'] = selector
     if frame_id is not None: kwargs['frameId'] = frame_id
-    result = await send_command("getOuterHTML", **kwargs)
+    
+    if selector:
+        action = "getOuterHTML" if content_type == 'html' else "getInnerText"
+    else:
+        action = "getPageHTML" if content_type == 'html' else "getPageText"
+        
+    result = await send_command(action, **kwargs)
     if not result.get("success"):
         return f"Error: {result.get('error')}"
     data = result.get("data")
+    
     if data is None:
-        return "Element not found"
-    return data
+        return "Element not found" if selector else ""
+        
+    if isinstance(data, dict):
+        return data.get("text", "")
+    return str(data)
 
 
 @mcp.tool()
@@ -407,16 +390,30 @@ async def browser_get_attribute(tab_id: int | str, selector: str, attribute: str
 
 
 @mcp.tool()
-async def browser_wait_for(tab_id: int | str, selector: str, timeout: int = 10000, frame_id: str | None = None) -> str:
-    """Wait for a DOM element to appear. Polls every 200ms until found or timeout.
+async def browser_wait(tab_id: int | str, target: str, wait_type: str = 'selector', timeout: int = 10000, frame_id: str | None = None) -> str:
+    """Wait for a DOM element, JS condition, or URL change.
     
     Args:
-        selector: CSS selector to wait for
+        target: The CSS selector, JS condition code, or URL pattern to wait for.
+        wait_type: 'selector' (default), 'condition', or 'url'.
         timeout: Maximum wait time in milliseconds (default 10000)
     """
-    kwargs = dict(tabId=tab_id, selector=selector, timeout=timeout)
+    kwargs = dict(tabId=tab_id, timeout=timeout)
     if frame_id is not None: kwargs['frameId'] = frame_id
-    result = await send_command("waitForSelector", _timeout=timeout/1000 + 5, **kwargs)
+    
+    if wait_type == 'selector':
+        kwargs['selector'] = target
+        action = "waitForSelector"
+    elif wait_type == 'condition':
+        kwargs['code'] = target
+        action = "waitForCondition"
+    elif wait_type == 'url':
+        kwargs['pattern'] = target
+        action = "waitForUrl"
+    else:
+        return "Error: wait_type must be 'selector', 'condition', or 'url'"
+
+    result = await send_command(action, _timeout=timeout/1000 + 5, **kwargs)
     if not result.get("success"):
         return f"Timeout: {result.get('error')}"
     return json.dumps(result.get("data"), indent=2)
@@ -432,6 +429,25 @@ async def browser_get_bounding_rect(tab_id: int | str, selector: str, frame_id: 
     kwargs = dict(tabId=tab_id, selector=selector)
     if frame_id is not None: kwargs['frameId'] = frame_id
     result = await send_command("getBoundingRect", **kwargs)
+    if not result.get("success"):
+        return f"Error: {result.get('error')}"
+    return json.dumps(result.get("data"), indent=2)
+
+
+# ==========================================
+# God Mode (Batching Engine)
+# ==========================================
+
+@mcp.tool()
+async def browser_execute_sequence(tab_id: int | str, sequence: list, frame_id: str | None = None) -> str:
+    """Execute actions sequentially with zero latency.
+    
+    Args:
+        sequence: list of JSON objects mapping to native actions (e.g., [{"action": "click", "selector": "..."}, {"action": "waitForSelector", "selector": "..."}, {"action": "fill", "selector": "...", "value": "..."}]). Action names map directly to standard browser_* tools.
+    """
+    kwargs = dict(tabId=tab_id, sequence=sequence)
+    if frame_id is not None: kwargs['frameId'] = frame_id
+    result = await send_command("executeSequence", **kwargs)
     if not result.get("success"):
         return f"Error: {result.get('error')}"
     return json.dumps(result.get("data"), indent=2)
@@ -486,6 +502,27 @@ async def browser_fill(tab_id: int | str, selector: str, value: str, frame_id: s
     if not result.get("success"):
         return f"Error: {result.get('error')}"
     return "Filled successfully"
+
+
+@mcp.tool()
+async def browser_paste(tab_id: int | str, text: str, selector: str | None = None, frame_id: str | None = None) -> str:
+    """Instantly paste massive text payloads into an input or editor using native CDP.
+    Bypasses slow keystroke emulation and deprecated execCommand APIs.
+    
+    Args:
+        text: Text to paste
+        selector: Optional CSS selector to focus before pasting. If omitted, pastes into currently focused element.
+    """
+    kwargs = dict(tabId=tab_id, text=text)
+    if selector:
+        kwargs["selector"] = selector
+    if frame_id is not None:
+        kwargs["frameId"] = frame_id
+    # Increase timeout for massive payloads
+    result = await send_command("insertTextCDP", _timeout=60, **kwargs)
+    if not result.get("success"):
+        return f"Error: {result.get('error')}"
+    return "Pasted successfully"
 
 
 @mcp.tool()
@@ -705,7 +742,7 @@ async def browser_navigate(tab_id: int | str, url: str) -> str:
 
 @mcp.tool()
 async def browser_reload(tab_id: int | str) -> str:
-    """Reload the current page.
+    """Reload the current page. PRO TIP: If a tab is dormant or sleeping (Memory Saver), use this to wake it up in the background without popping the browser up.
     
 """
     result = await send_command("reloadTab", tabId=tab_id)
@@ -714,79 +751,15 @@ async def browser_reload(tab_id: int | str) -> str:
     return "Page reloaded"
 
 
-@mcp.tool()
-async def browser_wait_for_url(tab_id: int | str, pattern: str, timeout: int = 10000) -> str:
-    """Wait for the tab's URL to match a pattern. Ideal for SPA navigation.
-    Pattern can be a substring (e.g., '/dashboard') or a regex (e.g., '/order/[0-9]+/').
-
-    Args:
-        pattern: Substring or /regex/ to match against the URL
-        timeout: Maximum wait time in milliseconds (default 10000)
-    """
-    result = await send_command("waitForUrl", tabId=tab_id, pattern=pattern,
-                                timeout=timeout, _timeout=timeout / 1000 + 5)
-    if not result.get("success"):
-        return f"Timeout: {result.get('error')}"
-    return result.get("data", {}).get("url", "URL matched")
-
-
-@mcp.tool()
-async def browser_scroll_to(tab_id: int | str, x: int = 0, y: int = 0, frame_id: str | None = None) -> str:
-    """Scroll the page to specific coordinates.
-
-    Args:
-        x: Horizontal scroll position in pixels (default 0)
-        y: Vertical scroll position in pixels (default 0)
-    """
-    kwargs = dict(tabId=tab_id, x=x, y=y)
-    if frame_id is not None: kwargs['frameId'] = frame_id
-    result = await send_command("scrollTo", **kwargs)
-    if not result.get("success"):
-        return f"Error: {result.get('error')}"
-    return f"Scrolled to ({x}, {y})"
-
 
 @mcp.tool()
 async def browser_back(tab_id: int | str) -> str:
-    """Go back in browser history.
-
-"""
+    """Go back in browser history."""
     result = await send_command("goBack", tabId=tab_id)
     if not result.get("success"):
         return f"Error: {result.get('error')}"
     return "Navigated back"
 
-
-@mcp.tool()
-async def browser_get_page_text(tab_id: int | str, max_length: int = 0, frame_id: str | None = None) -> str:
-    """Get the full visible text content of the current page.
-    
-    Args:
-        max_length: Maximum characters to return (default 0 = no limit)
-    """
-    kwargs = dict(tabId=tab_id, maxLength=max_length)
-    if frame_id is not None: kwargs['frameId'] = frame_id
-    result = await send_command("getPageText", **kwargs)
-    if not result.get("success"):
-        return f"Error: {result.get('error')}"
-    data = result.get("data", "")
-    return str(data) if data is not None else ""
-
-
-@mcp.tool()
-async def browser_get_page_html(tab_id: int | str, max_length: int = 0, frame_id: str | None = None) -> str:
-    """Get the full HTML of the current page.
-    
-    Args:
-        max_length: Maximum characters to return (default 0 = no limit)
-    """
-    kwargs = dict(tabId=tab_id, maxLength=max_length)
-    if frame_id is not None: kwargs['frameId'] = frame_id
-    result = await send_command("getPageHTML", **kwargs)
-    if not result.get("success"):
-        return f"Error: {result.get('error')}"
-    data = result.get("data", "")
-    return str(data) if data is not None else ""
 
 
 @mcp.tool()
@@ -816,7 +789,7 @@ async def browser_screenshot(tab_id: int | str, absolute_save_path: str) -> str:
 
 @mcp.tool()
 async def browser_screenshot_full_page(tab_id: int | str, absolute_save_path: str, max_height: int = 20000) -> str:
-    """Take a full-page screenshot by scrolling and stitching viewport captures.
+    """Take a full-page screenshot via single-shot CDP rendering.
     Args:
         absolute_save_path: Absolute file path to save the PNG.
         max_height: Maximum page height to capture in pixels (default 20000).
@@ -903,13 +876,20 @@ async def browser_list_tabs() -> str:
 
 
 @mcp.tool()
-async def browser_new_tab(url: str = "about:blank") -> str:
+async def browser_new_tab(url: str = "about:blank", window_id: str | None = None, force_restore: bool = False) -> str:
     """Open a new browser tab.
     
     Args:
         url: URL to open in the new tab (default: about:blank)
+        window_id: Optional virtual window ID to route the tab creation to a specific browser/window.
+        force_restore: If true, forcefully un-minimizes and restores the browser window (useful for screenshots).
     """
-    result = await send_command("newTab", url=url)
+    kwargs = {"url": url}
+    if window_id is not None:
+        kwargs["windowId"] = window_id
+    if force_restore:
+        kwargs["forceRestore"] = force_restore
+    result = await send_command("newTab", **kwargs)
     if not result.get("success"):
         return f"Error: {result.get('error')}"
     return json.dumps(result.get("data"))
@@ -927,10 +907,17 @@ async def browser_close_tab(tab_id: int | str) -> str:
 
 
 @mcp.tool()
+async def browser_discard_tab(tab_id: int | str) -> str:
+    """Forcefully put a background tab into Memory Saver (sleeping) mode to free up RAM without closing it. Useful for cleaning up after heavy research tasks."""
+    result = await send_command("discardTab", tabId=tab_id)
+    if not result.get("success"):
+        return f"Error: {result.get('error')}"
+    return json.dumps(result.get("data"))
+
+
+@mcp.tool()
 async def browser_switch_tab(tab_id: int | str) -> str:
-    """Switch to (activate) a browser tab and focus its window.
-    
-"""
+    """Switch to (activate) a browser tab and focus its window. WARNING: Do NOT use this to wake sleeping tabs (use browser_reload). ONLY use this if the user asks you to 'show' them a tab."""
     result = await send_command("switchTab", tabId=tab_id)
     if not result.get("success"):
         return f"Error: {result.get('error')}"
@@ -1101,7 +1088,7 @@ async def browser_delete_cookie(url: str, name: str) -> str:
 
 
 @mcp.tool()
-async def browser_upload_file(tab_id: int | str, selector: str, data_url: str) -> str:
+async def browser_upload_file(tab_id: int | str, selector: str, data_url: str, filename: str | None = None) -> str:
     """Set a file on an input[type=file] element using a data URL.
     Use browser_evaluate to read a local file as base64 first, or construct
     a data URL directly (e.g., 'data:image/png;base64,...').
@@ -1109,11 +1096,36 @@ async def browser_upload_file(tab_id: int | str, selector: str, data_url: str) -
     Args:
         selector:  CSS selector of the input[type=file] element
         data_url:  Data URL of the file (e.g., 'data:image/png;base64,iVBOR...')
+        filename:  Optional filename (e.g. 'image.png'). Defaults to derived extension.
     """
-    result = await send_command("setInputFiles", tabId=tab_id, selector=selector, dataUrl=data_url)
+    result = await send_command("setInputFiles", tabId=tab_id, selector=selector, dataUrl=data_url, filename=filename)
     if not result.get("success"):
         return f"Error: {result.get('error')}"
     return "File set on input element"
+
+
+@mcp.tool()
+async def browser_upload_file_cdp(tab_id: int | str, selector: str, file_paths: list[str] | None = None, data_urls: list[str] | None = None) -> str:
+    """Natively set files on an input[type=file] element using CDP.
+    Produces isTrusted: true events, bypassing anti-bot synthetic event checks.
+    
+    Args:
+        selector:   CSS selector of the input[type=file] element
+        file_paths: Optional list of absolute file paths to upload (e.g., ["C:/path/to/img.png"])
+        data_urls:  Optional list of base64 data URLs to upload (e.g., ["data:image/png;base64,..."])
+    """
+    kwargs = {"tabId": tab_id, "selector": selector}
+    if data_urls:
+        kwargs["file_data"] = data_urls
+    elif file_paths:
+        kwargs["files"] = file_paths
+    else:
+        return "Error: either file_paths or data_urls must be provided"
+
+    result = await send_command("setInputFilesCDP", **kwargs)
+    if not result.get("success"):
+        return f"Error: {result.get('error')}"
+    return "Files set natively via CDP"
 
 
 @mcp.tool()
@@ -1182,6 +1194,23 @@ async def browser_get_dialog(tab_id: int | str) -> str:
         return "No native dialog is currently active."
         
     return json.dumps(data, indent=2)
+
+
+@mcp.tool()
+async def browser_toggle_asset_blocking(enable: bool, block_fonts: bool = True, block_images: bool = False, block_trackers: bool = True) -> str:
+    """Toggle global Declarative Net Request (DNR) asset blocking for speed and stealth.
+    
+    Args:
+        enable: True to enable blocking, False to disable
+        block_fonts: Block heavy fonts
+        block_images: Block images (breaks vision models, but massively speeds up load)
+        block_trackers: Block analytics, pixels, and telemetry pings
+    """
+    kwargs = dict(enable=enable, blockFonts=block_fonts, blockImages=block_images, blockTrackers=block_trackers)
+    result = await send_command("toggleAssetBlocking", **kwargs)
+    if not result.get("success"):
+        return f"Error: {result.get('error')}"
+    return "Asset blocking configured"
 
 
 # ==========================================

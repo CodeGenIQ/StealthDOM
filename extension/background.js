@@ -75,6 +75,8 @@ async function ensureDebuggerAttached(tabId) {
     try {
         await chrome.debugger.attach(target, '1.3');
         await chrome.debugger.sendCommand(target, 'Page.enable');
+        await chrome.debugger.sendCommand(target, 'DOM.enable');
+        await chrome.debugger.sendCommand(target, 'Network.enable');
         _attachedDebuggers.add(tabId);
     } catch (e) {
         // If it's already attached by another extension or DevTools, that's fine.
@@ -179,6 +181,26 @@ function disableConversationBlocking() {
     }).then(() => {
         console.log('[StealthDOM] Conversation blocking disabled');
     });
+}
+
+function toggleAssetBlocking(enable, fonts, images, trackers) {
+    const removeRuleIds = [7000, 7001, 7002, 7003, 7004, 7005, 7006];
+    const addRules = [];
+    if (enable) {
+        if (fonts) addRules.push({ id: 7000, priority: 2, action: { type: 'block' }, condition: { resourceTypes: ['font'] } });
+        if (images) addRules.push({ id: 7001, priority: 2, action: { type: 'block' }, condition: { resourceTypes: ['image'] } });
+        if (trackers) {
+            ['*google-analytics*', '*pixel*', '*tracker*', '*analytics*', '*metrics*'].forEach((pattern, i) => {
+                addRules.push({
+                    id: 7002 + i, priority: 2, action: { type: 'block' },
+                    condition: { urlFilter: pattern, resourceTypes: ['script', 'xmlhttprequest', 'ping', 'image'] }
+                });
+            });
+        }
+    }
+    chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules })
+        .then(() => console.log(`[StealthDOM] Asset blocking ${enable ? 'ON' : 'OFF'}`));
+    return { success: true };
 }
 
 function disableCSPStripping() {
@@ -428,17 +450,49 @@ async function handleBackgroundCommand(msg) {
     const { action } = msg;
 
     switch (action) {
+        // === God Mode ===
+        case 'executeSequence': {
+            const { sequence, tabId, frameId } = msg;
+            if (!Array.isArray(sequence)) return { success: false, error: 'sequence must be an array' };
+            const results = [];
+            for (let i = 0; i < sequence.length; i++) {
+                const step = sequence[i];
+                // Inherit routing context if not explicitly provided
+                if (!step.tabId && tabId) step.tabId = tabId;
+                if (!step.frameId && frameId) step.frameId = frameId;
+                
+                // Assign a unique ID to the step so callbacks map correctly
+                step.id = Math.random().toString(36).substring(2, 15);
+                
+                // Execute step
+                const stepResult = await bridgeRouteCommand(step);
+                results.push({ action: step.action, ...stepResult });
+                
+                // If a step fails, halt the sequence immediately
+                if (!stepResult.success) {
+                    return { 
+                        success: false, 
+                        error: `Sequence failed at step ${i + 1} ('${step.action}'): ${stepResult.error}`, 
+                        results 
+                    };
+                }
+            }
+            return { success: true, data: results };
+        }
+
         // === Tab Management ===
         case 'listTabs':
             return await cmdListTabs();
         case 'newTab':
-            return await cmdNewTab(msg.url);
+            return await cmdNewTab(msg.url, msg.windowId, msg.forceRestore);
         case 'closeTab':
             return await cmdCloseTab(msg.tabId);
         case 'switchTab':
             return await cmdSwitchTab(msg.tabId);
         case 'reloadTab':
             return await cmdReloadTab(msg.tabId);
+        case 'discardTab':
+            return await cmdDiscardTab(msg.tabId);
 
         // === Navigation ===
         case 'navigate':
@@ -469,6 +523,15 @@ async function handleBackgroundCommand(msg) {
             return await cmdKeyPressCDP(msg.tabId, msg.key, msg.modifiers);
         case 'keyComboCDP':
             return await cmdKeyComboCDP(msg.tabId, msg.keys);
+        case 'insertTextCDP':
+        case 'paste':
+            return await cmdInsertTextCDP(msg.tabId, msg.text || msg.value, msg.selector, msg.frameId);
+        case 'setInputFilesCDP':
+            return await cmdSetFileInputFilesCDP(msg.tabId, msg.selector, msg.files);
+            
+        // === Settings ===
+        case 'toggleAssetBlocking':
+            return toggleAssetBlocking(msg.enable, msg.blockFonts, msg.blockImages, msg.blockTrackers);
 
         // === Cookies ===
         case 'getCookies':
@@ -522,9 +585,11 @@ async function handleBackgroundCommand(msg) {
             _netCapture.clear();
             return { success: true };
 
-        // === URL Waiting ===
+        // === URL & Condition Waiting ===
         case 'waitForUrl':
             return await cmdWaitForUrl(msg.tabId, msg.pattern, msg.timeout);
+        case 'waitForCondition':
+            return await cmdWaitForCondition(msg.tabId, msg.code, msg.timeout);
         case 'enableBlock':
             enableConversationBlocking();
             return { success: true, data: "Blocking enabled" };
@@ -612,11 +677,26 @@ function bridgeConnect() {
         clearTimeout(_bridgeReconnect);
 
         // Auto-detect browser label for multi-browser support
-        const ua = navigator.userAgent || '';
-        const browserLabel = ua.includes('Brave') ? 'brave'
-            : ua.includes('Edg/') ? 'edge'
-            : ua.includes('Chrome') ? 'chrome'
-            : 'browser';
+        let browserLabel = 'browser';
+        
+        // Brave aggressively hides from the userAgent string for anti-fingerprinting, 
+        // but it is exposed in userAgentData.brands
+        if (navigator.userAgentData && navigator.userAgentData.brands) {
+            const brands = navigator.userAgentData.brands.map(b => b.brand);
+            if (brands.includes('Brave')) browserLabel = 'brave';
+            else if (brands.includes('Microsoft Edge')) browserLabel = 'edge';
+            else if (brands.includes('Google Chrome')) browserLabel = 'chrome';
+            else if (brands.includes('Chromium')) browserLabel = 'chrome';
+        }
+        
+        // Fallback for older browsers
+        if (browserLabel === 'browser') {
+            const ua = navigator.userAgent || '';
+            browserLabel = ua.includes('Brave') ? 'brave'
+                : ua.includes('Edg/') ? 'edge'
+                : ua.includes('Chrome') ? 'chrome'
+                : 'browser';
+        }
 
         bridgeSend({
             type: 'handshake',
@@ -684,18 +764,19 @@ async function bridgeRouteCommand(msg) {
 
     // These actions are handled directly in the background script
     const bgActions = [
-        'listTabs', 'newTab', 'closeTab', 'switchTab', 'reloadTab',
+        'listTabs', 'newTab', 'closeTab', 'switchTab', 'reloadTab', 'discardTab',
         'navigate', 'goBack',
         'captureScreenshot', 'captureFullPageScreenshot',
         'mouseMoveCDP', 'mouseClickCDP', 'mouseDownCDP', 'mouseUpCDP', 'mouseDragCDP', 'mouseWheelCDP',
-        'keyPressCDP', 'keyComboCDP',
+        'keyPressCDP', 'keyComboCDP', 'insertTextCDP', 'paste', 'setInputFilesCDP',
         'getCookies', 'setCookie', 'deleteCookie', 'listCookieStores',
         'startNetCapture', 'stopNetCapture', 'getNetCapture', 'clearNetCapture',
         'newWindow', 'newIncognitoWindow', 'closeWindow', 'resizeWindow',
+        'toggleAssetBlocking',
         'executeScript', 'executeScriptAllFrames', 'listFrames',
         'enableBlock', 'disableBlock',
-        'ping', 'handleDialog', 'getActiveDialog',
-        'waitForUrl',
+        'handleDialog', 'getActiveDialog',
+        'waitForUrl', 'waitForCondition', 'executeSequence',
     ];
 
     try {
@@ -808,11 +889,18 @@ async function cmdListTabs() {
     };
 }
 
-async function cmdNewTab(url) {
-    const tab = await chrome.tabs.create({ url: url || 'about:blank' });
+async function cmdNewTab(url, windowId, forceRestore) {
+    const options = { url: url || 'about:blank' };
+    if (windowId !== undefined && windowId !== null) {
+        options.windowId = Number(windowId);
+    }
+    const tab = await chrome.tabs.create(options);
+    if (forceRestore) {
+        await chrome.windows.update(tab.windowId, { focused: true, state: 'normal' });
+    }
     return {
         success: true,
-        data: { tabId: tab.id, url: tab.url }
+        data: { tabId: tab.id, url: tab.url, windowId: tab.windowId }
     };
 }
 
@@ -839,6 +927,16 @@ async function cmdReloadTab(tabId) {
     if (!tabId) return { success: false, error: 'tabId required' };
     await chrome.tabs.reload(tabId);
     return { success: true };
+}
+
+async function cmdDiscardTab(tabId) {
+    if (!tabId) return { success: false, error: 'tabId required' };
+    try {
+        const discardedTab = await chrome.tabs.discard(tabId);
+        return { success: true, data: discardedTab };
+    } catch (e) {
+        return { success: false, error: `Failed to discard tab: ${e.message}` };
+    }
 }
 
 // ==========================================
@@ -895,7 +993,7 @@ async function cmdCaptureScreenshotCDP(tabId) {
                 quality: 100,
                 fromSurface: true,
             }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('CDP_TIMEOUT')), 3000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('CDP_TIMEOUT')), 4000))
         ]);
         
         return {
@@ -909,7 +1007,10 @@ async function cmdCaptureScreenshotCDP(tabId) {
         };
     } catch (e) {
         if (e.message === 'CDP_TIMEOUT') {
-            throw new Error('Timeout: The browser window is likely fully occluded (covered by another maximized app), causing the OS to suspend the graphics compositor.');
+            const tab = await chrome.tabs.get(tabId);
+            const win = await chrome.windows.get(tab.windowId);
+            const stateDesc = win.state === 'minimized' ? 'minimized' : 'fully occluded';
+            throw new Error(`Timed out. Window: ${stateDesc}, graphics suspended. Either stop and tell user to restore window, or open a new tab with the force flag.`);
         }
         throw e; // Rethrow so caller can fall back to captureVisibleTab
     }
@@ -951,7 +1052,7 @@ async function cmdCaptureFullPageScreenshotCDP(tabId, maxHeight = 20000) {
         // Brief pause for re-layout
         await new Promise(r => setTimeout(r, 100));
 
-        // Race against a 5-second timeout for full page capture
+        // Race against a 4-second timeout for full page capture
         const result = await Promise.race([
             chrome.debugger.sendCommand(target, 'Page.captureScreenshot', {
                 format: 'png',
@@ -959,7 +1060,7 @@ async function cmdCaptureFullPageScreenshotCDP(tabId, maxHeight = 20000) {
                 captureBeyondViewport: true,
                 clip: { x: 0, y: 0, width: contentWidth, height: contentHeight, scale: 1 },
             }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('CDP_TIMEOUT')), 5000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('CDP_TIMEOUT')), 4000))
         ]);
 
         // Reset device metrics to original
@@ -988,7 +1089,10 @@ async function cmdCaptureFullPageScreenshotCDP(tabId, maxHeight = 20000) {
             try { await chrome.debugger.sendCommand(target, 'Emulation.clearDeviceMetricsOverride'); } catch (_) {}
         }
         if (e.message === 'CDP_TIMEOUT') {
-            throw new Error('Timeout: The browser window is likely fully occluded (covered by another maximized app), causing the OS to suspend the graphics compositor.');
+            const tab = await chrome.tabs.get(tabId);
+            const win = await chrome.windows.get(tab.windowId);
+            const stateDesc = win.state === 'minimized' ? 'minimized' : 'fully occluded';
+            throw new Error(`Timed out. Window: ${stateDesc}, graphics suspended. Either stop and tell user to restore window, or open a new tab with the force flag.`);
         }
         throw e; // Rethrow so caller can fall back to scroll-stitch
     }
@@ -1021,8 +1125,16 @@ async function captureWithRetry(windowId, options, maxAttempts = 5) {
         let delay = 600; // ms — start above the 1-second quota window
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                return await chrome.tabs.captureVisibleTab(windowId, options);
+                return await Promise.race([
+                    chrome.tabs.captureVisibleTab(windowId, options),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('CAPTURE_TIMEOUT')), 4000))
+                ]);
             } catch (e) {
+                if (e.message === 'CAPTURE_TIMEOUT') {
+                    const win = await chrome.windows.get(windowId);
+                    const stateDesc = win.state === 'minimized' ? 'minimized' : 'fully occluded';
+                    throw new Error(`Timed out. Window: ${stateDesc}, graphics suspended. Either stop and tell user to restore window, or open a new tab with the force flag.`);
+                }
                 if (e.message && e.message.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND') && attempt < maxAttempts) {
                     await new Promise(r => setTimeout(r, delay));
                     delay = Math.min(delay * 1.5, 3000); // cap at 3s
@@ -1064,6 +1176,7 @@ async function cmdCaptureScreenshot(tabId) {
         try {
             return await cmdCaptureScreenshotCDP(tabId);
         } catch (cdpError) {
+            if (cdpError.message.includes('Graphics Suspended')) throw cdpError;
             // CDP unavailable (DevTools open on this tab, or internal page)
             // Fall back to captureVisibleTab
             console.log('[StealthDOM] CDP screenshot unavailable, falling back to captureVisibleTab:', cdpError.message);
@@ -1143,6 +1256,7 @@ async function cmdCaptureFullPageScreenshot(tabId, maxHeight = 20000) {
         try {
             return await cmdCaptureFullPageScreenshotCDP(tabId, maxHeight);
         } catch (cdpError) {
+            if (cdpError.message.includes('Graphics Suspended')) throw cdpError;
             console.log('[StealthDOM] CDP full-page screenshot unavailable, falling back to scroll-stitch:', cdpError.message);
         }
 
@@ -2198,6 +2312,67 @@ async function cmdExecuteScriptAllFramesViaTag(code, tabId) {
 }
 
 // ==========================================
+// Wait For Condition
+// ==========================================
+
+async function cmdWaitForCondition(tabId, codeStr, timeoutMs = 10000) {
+    try {
+        const results = await chrome.scripting.executeScript({
+            target: { tabId },
+            world: 'MAIN',
+            func: (code, timeout) => {
+                return new Promise((resolve) => {
+                    let checkFn;
+                    try {
+                        // In MAIN world, we just evaluate the function.
+                        // If the page has unsafe-eval CSP, this might fail, but declarativeNetRequest
+                        // strips CSP headers, so it usually succeeds.
+                        checkFn = new Function(`return (function() { ${code} })();`);
+                    } catch (e) {
+                        resolve({ success: false, error: `Failed to compile condition: ${e.message}` });
+                        return;
+                    }
+
+                    const check = () => {
+                        try { return checkFn(); } catch (e) { return false; }
+                    };
+
+                    const initial = check();
+                    if (initial) {
+                        resolve({ success: true, data: initial });
+                        return;
+                    }
+
+                    const observer = new MutationObserver(() => {
+                        const res = check();
+                        if (res) {
+                            observer.disconnect();
+                            clearTimeout(timer);
+                            resolve({ success: true, data: res });
+                        }
+                    });
+                    
+                    observer.observe(document.documentElement || document, { childList: true, subtree: true, attributes: true, characterData: true });
+
+                    const timer = setTimeout(() => {
+                        observer.disconnect();
+                        resolve({ success: false, error: "Timeout waiting for condition" });
+                    }, timeout);
+                });
+            },
+            args: [codeStr, timeoutMs]
+        });
+
+        if (!results || results.length === 0) {
+            return { success: false, error: 'Failed to execute condition in page.' };
+        }
+        return results[0].result;
+    } catch (e) {
+        return { success: false, error: `waitForCondition failed: ${e.message}` };
+    }
+}
+
+// ==========================================
 // Window Management
 // ==========================================
 
@@ -2267,6 +2442,69 @@ async function cmdResizeWindow(windowId, width, height, left, top, state) {
     }
 }
 
+async function cmdInsertTextCDP(tabId, text, selector, frameId) {
+    if (!tabId) return { success: false, error: 'tabId required' };
+    if (text === undefined) return { success: false, error: 'text required' };
+
+    try {
+        if (selector) {
+            // Forward to content script to focus the element first
+            const focusResult = await bridgeForwardToContentScript({
+                action: 'focus',
+                tabId,
+                frameId,
+                selector
+            });
+            if (!focusResult.success) {
+                return focusResult; // Return the error if focus fails
+            }
+        }
+
+        return await withDebugger(tabId, async (target) => {
+            await chrome.debugger.sendCommand(target, 'Input.insertText', { text });
+            return { success: true };
+        });
+    } catch (e) {
+        return { success: false, error: `CDP paste failed: ${e.message}` };
+    }
+}
+
+/**
+ * CDP set file input files: natively set files on an input[type=file] element.
+ * Produces isTrusted: true events.
+ */
+async function cmdSetFileInputFilesCDP(tabId, selector, files) {
+    if (!tabId) return { success: false, error: 'tabId required' };
+    if (!selector) return { success: false, error: 'selector required' };
+    if (!files || !Array.isArray(files)) return { success: false, error: 'files (array of absolute paths) required' };
+
+    try {
+        return await withDebugger(tabId, async (target) => {
+            // 1. Get the root document node
+            const { root } = await chrome.debugger.sendCommand(target, 'DOM.getDocument');
+            
+            // 2. Query the selector to get its nodeId
+            const { nodeId } = await chrome.debugger.sendCommand(target, 'DOM.querySelector', {
+                nodeId: root.nodeId,
+                selector: selector
+            });
+
+            if (!nodeId) {
+                return { success: false, error: `Element not found for selector: ${selector}` };
+            }
+
+            // 3. Set the files (absolute paths)
+            await chrome.debugger.sendCommand(target, 'DOM.setFileInputFiles', {
+                nodeId: nodeId,
+                files: files
+            });
+
+            return { success: true, data: { nodeId, files, method: 'cdp' } };
+        });
+    } catch (e) {
+        return { success: false, error: `CDP set files failed: ${e.message}` };
+    }
+}
 
 // ==========================================
 // URL Waiting

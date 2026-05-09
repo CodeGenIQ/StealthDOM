@@ -70,6 +70,7 @@ class BridgeServer:
             self._extension_handler,
             self.host,
             self.port,
+            max_size=50_000_000,
         )
         logger.info("Extension port listening on ws://%s:%s", self.host, self.port)
 
@@ -77,6 +78,7 @@ class BridgeServer:
             self._control_handler,
             self.host,
             self.control_port,
+            max_size=50_000_000,
         )
         logger.info("Control port listening on ws://%s:%s", self.host, self.control_port)
         logger.info("Waiting for browser extension to connect...")
@@ -243,30 +245,48 @@ class BridgeServer:
             logger.info("Control client disconnected from %s", addr)
     def _parse_virtual_id(self, val, default_label: str):
         if isinstance(val, str) and ':' in val:
-            label, _, raw_id_str = val.partition(':')
+            parts = val.split(':')
+            label = parts[0]
+            raw_id_str = parts[-1]
             try:
                 return label, int(raw_id_str)
             except ValueError:
                 return label, raw_id_str
         return default_label, val
 
-    def _virtualize_outgoing(self, action: str, data, label: str) -> None:
+    def _virtualize_outgoing(self, action: str, data, label: str, context: str = "") -> None:
         if not data or not label:
             return
             
         def _v(val):
             if val is None: return None
-            return f"{label}:{val}"
+            return f"{label}{context}:{val}"
 
         if action == 'newTab':
-            if 'id' in data: data['id'] = _v(data['id'])
-            if 'windowId' in data: data['windowId'] = _v(data['windowId'])
-        elif action in ('newWindow', 'newIncognitoWindow'):
-            if 'id' in data: data['id'] = _v(data['id'])
-            if 'tabs' in data and isinstance(data['tabs'], list):
-                for t in data['tabs']:
-                    if 'id' in t: t['id'] = _v(t['id'])
-                    if 'windowId' in t: t['windowId'] = _v(t['windowId'])
+            w_id = data.get('windowId')
+            t_id = data.get('tabId')
+            if w_id is not None: data['windowId'] = f"{label}:{w_id}"
+            if t_id is not None: data['tabId'] = f"{label}:{w_id}:{t_id}"
+        elif action in ('newWindow', 'newIncognitoWindow', 'listWindows'):
+            if action == 'listWindows' and isinstance(data, list):
+                for w in data:
+                    w_id = w.get('id')
+                    if w_id is not None: w['id'] = f"{label}:{w_id}"
+                    if 'tabs' in w and isinstance(w['tabs'], list):
+                        for t in w['tabs']:
+                            tw_id = t.get('windowId', w_id)
+                            t_id = t.get('id')
+                            if tw_id is not None: t['windowId'] = f"{label}:{tw_id}"
+                            if t_id is not None: t['id'] = f"{label}:{tw_id}:{t_id}"
+            elif isinstance(data, dict):
+                w_id = data.get('id')
+                if w_id is not None: data['id'] = f"{label}:{w_id}"
+                if 'tabs' in data and isinstance(data['tabs'], list):
+                    for t in data['tabs']:
+                        tw_id = t.get('windowId', w_id)
+                        t_id = t.get('id')
+                        if tw_id is not None: t['windowId'] = f"{label}:{tw_id}"
+                        if t_id is not None: t['id'] = f"{label}:{tw_id}:{t_id}"
         elif action == 'listFrames':
             if 'frames' in data and isinstance(data['frames'], list):
                 for f in data['frames']:
@@ -308,8 +328,19 @@ class BridgeServer:
 
         # ---- Resolve routing label from virtual IDs ----
         routing_label = self._primary_label
+        parent_context = ""
         for key in ['tabId', 'windowId', 'frameId']:
             if key in data and data[key] is not None:
+                val = data[key]
+                if isinstance(val, str) and ':' in val:
+                    parts = val.split(':')
+                    if key == 'tabId' and len(parts) >= 3:
+                        parent_context = f":{parts[1]}:{parts[2]}"
+                    elif key == 'tabId' and len(parts) == 2:
+                        parent_context = f":{parts[1]}"
+                    elif key == 'windowId' and len(parts) >= 2:
+                        parent_context = f":{parts[1]}"
+                
                 label, raw_val = self._parse_virtual_id(data[key], routing_label)
                 data[key] = raw_val
                 if key in ('tabId', 'windowId'):
@@ -317,11 +348,53 @@ class BridgeServer:
 
         # ---- Forward command to the resolved connection ----
         kwargs = {k: v for k, v in data.items() if k != 'action'}
+        
+        def _process_file_upload(action_name, kw):
+            if action_name == 'setInputFilesCDP' and 'file_data' in kw:
+                file_data = kw.pop('file_data')
+                import base64
+                import tempfile
+                import os
+                
+                try:
+                    data_urls = file_data if isinstance(file_data, list) else [file_data]
+                    temp_paths = []
+                    for data_url in data_urls:
+                        if ',' in data_url:
+                            header, encoded = data_url.split(',', 1)
+                            ext = '.tmp'
+                            if 'image/png' in header: ext = '.png'
+                            elif 'image/jpeg' in header: ext = '.jpg'
+                            elif 'application/pdf' in header: ext = '.pdf'
+                            
+                            raw_bytes = base64.b64decode(encoded)
+                            fd, path = tempfile.mkstemp(suffix=ext, prefix='stealth_upload_')
+                            with os.fdopen(fd, 'wb') as f:
+                                f.write(raw_bytes)
+                            temp_paths.append(path)
+                            logger.info("Created temp file for upload: %s", path)
+                    kw['files'] = temp_paths
+                except Exception as e:
+                    logger.error("Failed to process file_data: %s", e)
+                    return False
+            return True
+
+        # Handle top-level command
+        if not _process_file_upload(action, kwargs):
+            return {'success': False, 'error': "Bridge failed to process file_data"}
+            
+        # Handle sequence steps
+        if action == 'executeSequence' and 'sequence' in kwargs:
+            for step in kwargs['sequence']:
+                step_action = step.get('action')
+                if not _process_file_upload(step_action, step):
+                    return {'success': False, 'error': f"Bridge failed to process file_data in sequence step: {step_action}"}
+
         result = await self.send_command(action, label=routing_label, _timeout=timeout, **kwargs)
         
         # ---- Virtualize outgoing IDs ----
         if result.get('success'):
-            self._virtualize_outgoing(action, result.get('data'), routing_label)
+            self._virtualize_outgoing(action, result.get('data'), routing_label, parent_context)
             
         if msg_id:
             result['_msg_id'] = msg_id
@@ -344,9 +417,13 @@ class BridgeServer:
                 tabs = result.get('data', [])
                 for tab in tabs:
                     real_id = tab.get('id')
-                    tab['id'] = f"{label}:{real_id}"
-                    if 'windowId' in tab:
-                        tab['windowId'] = f"{label}:{tab['windowId']}"
+                    window_id = tab.get('windowId')
+                    
+                    if window_id is not None:
+                        tab['windowId'] = f"{label}:{window_id}"
+                        tab['id'] = f"{label}:{window_id}:{real_id}"
+                    else:
+                        tab['id'] = f"{label}:{real_id}"
                     all_tabs.append(tab)
             else:
                 errors.append(f"{label}: {result.get('error', 'unknown error')}")

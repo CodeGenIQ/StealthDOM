@@ -11,9 +11,9 @@ During rigorous testing of StealthDOM's screenshot capabilities via the Chrome D
 - **Caveat**: This only applies to normal web pages captured via CDP. Internal browser pages (e.g., `chrome://`) require the `captureVisibleTab` fallback, which strictly requires active window visibility and explicit user invocation.
 
 ## 2. Occluded Windows
-- **Finding**: CDP screenshots will **hang indefinitely** (eventually timing out) if the browser window is fully occluded (covered completely by another opaque, maximized application like an IDE).
-- **Details**: When a window is occluded, the Windows Desktop Window Manager (DWM) signals Chromium that it is not visible. Chromium responds by entirely suspending the graphics compositor to save power. Because the window state is still technically "normal" (not minimized), Chromium does not trigger its special headless rendering path. Any `Page.captureScreenshot` request will wait forever for a compositor frame that never arrives.
-- **Resolution**: We implemented a strict `Promise.race` timeout on the CDP screenshot call to immediately catch and report this occlusion hang, preventing 30-second silent failures.
+- **Finding**: CDP screenshots will **usually succeed**, but can occasionally hang if the OS aggressively suspends the compositor for a fully occluded window (covered completely by another application).
+- **Details**: When a window is covered, the Windows Desktop Window Manager (DWM) often keeps the graphics canvas alive in memory, especially if the covering app has hardware acceleration or overlays. Because the window state remains "normal," Chromium can usually paint and return a frame instantly. However, if the OS does decide to aggressively suspend the compositor, the `Page.captureScreenshot` request will hang.
+- **Resolution**: We implemented a strict 4-second timeout that dynamically queries the OS state and returns a deterministic error to the AI agent (`"The browser window is fully occluded"`), preventing silent failures.
 
 ## 3. Discarded (Sleeping) Tabs
 - **Finding**: CDP cannot interact with a tab that has been proactively discarded by Chrome's Memory Saver.
@@ -26,9 +26,9 @@ During rigorous testing of StealthDOM's screenshot capabilities via the Chrome D
 - **Resolution**: Just like screenshots, it is completely unnecessary to forcefully restore a minimized window to execute native mouse clicks or typing automation.
 
 ## 5. Newly Created Background Tabs (Minimized State)
-- **Finding**: If a *brand new tab* is created in the background while the browser window is currently minimized, Chromium will completely defer allocating a graphics surface for it. Standard `Page.captureScreenshot` commands will hang indefinitely.
-- **Details**: Simply reloading the tab (`browser_reload`) or evaluating JavaScript on it will **not** force Chromium to render it. It will remain surface-less.
-- **Current Status**: We are currently investigating if there is *any* silent CDP command (like Emulation overrides) that forces a rendering surface to allocate without popping the window up. Until then, newly created tabs in minimized windows cannot be screenshot without restoring the window.
+- **Finding**: If a *brand new tab* is created while the browser window is physically minimized to the taskbar, Chromium will completely refuse to allocate a graphics surface for it. Standard `Page.captureScreenshot` commands will hang indefinitely.
+- **Details**: Unlike an existing tab (which has a previously rendered frame cached in memory), a new tab has no canvas to paint onto. Furthermore, simply reloading the tab (`browser_reload`) or evaluating JavaScript on it will **not** force Chromium to render it. It will remain surface-less.
+- **Resolution**: We implemented a strict 4-second timeout that dynamically queries the OS window state. If the AI agent attempts to screenshot a newly created tab in a minimized window, the capture instantly fails and returns a deterministic error (`"The browser window is minimized"`), instructing the AI to ask the human user to manually restore the window.
 
 ---
 *Conclusion: Chromium's CDP implementation natively supports fully headless operation of minimized windows for existing tabs, contradicting common automation heuristics.*

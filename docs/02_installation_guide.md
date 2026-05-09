@@ -158,7 +158,7 @@ Once the bridge is running and you have a browser tab open:
 
 ## Step 6: Configure MCP for AI Agents
 
-StealthDOM includes a full MCP (Model Context Protocol) server that exposes all 57 commands as tools for AI agents. Below are setup instructions for popular AI-powered IDEs.
+StealthDOM includes a full MCP (Model Context Protocol) server that exposes all 50 commands as tools for AI agents. Below are setup instructions for popular AI-powered IDEs.
 
 ### General MCP Configuration
 

@@ -8,7 +8,7 @@ StealthDOM replaces Playwright/Puppeteer by controlling the browser **from insid
 
 StealthDOM can be used in two ways:
 
-**AI Agents** connect via the MCP protocol — 49 commands exposed as tools with descriptions, so the agent knows what's available and how to use it. (see **[03_api_reference.md](docs/03_api_reference.md)** for complete API reference)
+**AI Agents** connect via the MCP protocol — 50 commands exposed as tools with descriptions, so the agent knows what's available and how to use it. (see **[03_api_reference.md](docs/03_api_reference.md)** for complete API reference)
 
 **Scripts & applications** connect directly via WebSocket on port 9878, sending JSON commands and receiving JSON responses. (see **[03_api_reference.md](docs/03_api_reference.md)** for complete API reference)
 
@@ -62,17 +62,17 @@ StealthDOM has been tested against major bot detection suites:
 
 ## Features
 
-- **49 MCP tools**: DOM queries, clicks, typing, scrolling, keyboard, hover, native CDP mouse (move, click, drag, wheel), navigation, cookies, screenshots, JS execution, network capture, proxy fetch, tab/window management
+- **50 MCP tools**: DOM queries, clicks, typing, scrolling, keyboard, hover, native CDP mouse (move, click, drag, wheel), native dialogs, navigation, cookies, screenshots, JS execution, network capture, proxy fetch, tab/window management
 - **Multi-browser support**: Connect Chrome, Brave, and Edge simultaneously — tabs from all browsers shown in one unified list
 - **Virtual tab IDs**: Namespaced as `"label:tabId"` (e.g., `"brave:12345"`) for transparent multi-browser routing
 - **Window management**: Open regular or incognito windows, resize, close
 - **Tab management**: List, open, close, switch tabs across all connected browsers
-- **Full-page screenshots**: Scroll-and-stitch PNG capture of entire documents (with optional file save)
+- **Full-page screenshots**: CDP-based single-shot capture. Extension automatically falls back to scroll-and-stitch or `captureVisibleTab` if CDP fails (e.g. if DevTools is open or on internal `chrome://` pages).
 - **Cookies**: Get, set, delete
 - **JavaScript execution**: Arbitrary JS in page context — works on ALL sites including YouTube/Gmail (CSP headers auto-stripped)
 - **Network capture**: Circular buffer (5,000 entries) with overflow detection
 - **Proxy Fetch**: Route HTTP requests through the browser's real TLS fingerprint and cookies
-- **MCP integration**: Full MCP server with 49 tools, instructions, and capabilities resource
+- **MCP integration**: Full MCP server with 50 tools, instructions, and capabilities resource.
 - **Cross-frame DOM access**: Target elements inside iframes and framesets via `frame_id` — works on Gmail, OAuth dialogs, payment widgets
 - **Explicit targeting**: All commands target tabs by ID — safe for multi-window, multi-agent use
 - **On-demand injection**: Content script only loads in tabs you actually use — zero overhead on untouched tabs
@@ -128,9 +128,9 @@ Double-click **`install.bat`** — it handles everything: Python, dependencies, 
        result = json.loads(await ws.recv())
        tabs = result["data"]
 
-       # Use virtualId for reliable multi-browser routing
+       # The "id" field is already the virtual ID when multiple browsers are connected
        tab = tabs[0]
-       tab_id = tab.get("virtualId") or tab["id"]
+       tab_id = tab["id"]
        print(f"Using tab {tab_id}: {tab['title']}")
 
        # Get the page text
@@ -150,12 +150,12 @@ Multiple browsers can connect to the bridge simultaneously. Each browser's exten
 ```
 # Example: browser_list_tabs() output with two browsers connected
 [
-  {"id": 123, "virtualId": "brave:123", "browserId": "brave", "title": "...", ...},
-  {"id": 456, "virtualId": "chrome:456", "browserId": "chrome", "title": "...", ...}
+  {"id": "brave:42:123", "windowId": "brave:42", "title": "...", ...},
+  {"id": "chrome:43:456", "windowId": "chrome:43", "title": "...", ...}
 ]
 ```
 
-Always use `virtualId` as your `tab_id` to ensure commands reach the right browser.
+The `"id"` field is already the virtual ID. Use it directly as your `tab_id` to ensure commands reach the right browser.
 
 ## Documentation
 
@@ -163,7 +163,6 @@ Always use `virtualId` as your `tab_id` to ensure commands reach the right brows
 - [**Architecture & Design**](docs/01_architecture.md) — How it works, design decisions, CSP bypass, cross-frame support
 - [**Installation & Setup Guide**](docs/02_installation_guide.md) — Step-by-step setup, MCP configuration for popular IDEs, troubleshooting
 - [**Full API Reference**](docs/03_api_reference.md) — Every command with parameters, WebSocket JSON, and MCP tool names
-- [**Screenshot Approaches**](docs/04_screenshot_approaches.md) — CDP screenshot architecture, detection analysis, comparison
 
 ## Requirements
 

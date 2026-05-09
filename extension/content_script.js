@@ -118,7 +118,7 @@
                 // ('return document.querySelectorAll("a").length').
                 return await forwardToBackground({ action: 'executeScript', code: msg.code, world: msg.world });
             case 'setInputFiles':
-                return await cmdSetInputFiles(msg.selector, msg.dataUrl);
+                return await cmdSetInputFiles(msg.selector, msg.dataUrl, msg.filename);
             case 'proxyFetch':
                 return await cmdProxyFetch(msg.url, msg.method, msg.headers, msg.body, msg.bodyType);
 
@@ -256,30 +256,53 @@
     }
 
     async function cmdWaitForSelector(selector, timeout = 10000) {
-        const start = Date.now();
-        while (Date.now() - start < timeout) {
+        return new Promise((resolve) => {
             const el = document.querySelector(selector);
             if (el) {
-                // Small debounce: SPAs (React/Angular) attach event listeners
-                // slightly after DOM insertion. Wait 50ms for hydration.
-                await sleep(50);
-                return { success: true, data: serializeElement(el) };
+                setTimeout(() => resolve({ success: true, data: serializeElement(el) }), 50);
+                return;
             }
-            await sleep(200);
-        }
-        return { success: false, error: `Timeout waiting for: ${selector}` };
+            const observer = new MutationObserver(() => {
+                const node = document.querySelector(selector);
+                if (node) {
+                    observer.disconnect();
+                    clearTimeout(timer);
+                    setTimeout(() => resolve({ success: true, data: serializeElement(node) }), 50);
+                }
+            });
+            observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+            const timer = setTimeout(() => {
+                observer.disconnect();
+                resolve({ success: false, error: `Timeout waiting for: ${selector}` });
+            }, timeout);
+        });
     }
 
     async function cmdWaitForText(selector, text, timeout = 10000) {
-        const start = Date.now();
-        while (Date.now() - start < timeout) {
-            const el = document.querySelector(selector);
-            if (el && (el.innerText || '').includes(text)) {
-                return { success: true, data: { text: el.innerText } };
+        return new Promise((resolve) => {
+            const check = () => {
+                const el = document.querySelector(selector);
+                return el && (el.innerText || '').includes(text) ? el : null;
+            };
+            const initial = check();
+            if (initial) {
+                resolve({ success: true, data: { text: initial.innerText } });
+                return;
             }
-            await sleep(200);
-        }
-        return { success: false, error: `Timeout waiting for text "${text}" in ${selector}` };
+            const observer = new MutationObserver(() => {
+                const node = check();
+                if (node) {
+                    observer.disconnect();
+                    clearTimeout(timer);
+                    resolve({ success: true, data: { text: node.innerText } });
+                }
+            });
+            observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+            const timer = setTimeout(() => {
+                observer.disconnect();
+                resolve({ success: false, error: `Timeout waiting for text "${text}" in ${selector}` });
+            }, timeout);
+        });
     }
 
     // ==========================================
@@ -543,7 +566,7 @@
         }
     }
 
-    async function cmdSetInputFiles(selector, dataUrl) {
+    async function cmdSetInputFiles(selector, dataUrl, filename) {
         const el = document.querySelector(selector);
         if (!el || el.type !== 'file') {
             return { success: false, error: 'File input not found' };
@@ -553,7 +576,13 @@
             // Convert data URL to File object
             const res = await fetch(dataUrl);
             const blob = await res.blob();
-            const file = new File([blob], 'upload', { type: blob.type });
+            
+            let finalName = filename;
+            if (!finalName) {
+                const ext = blob.type.split('/')[1] || 'bin';
+                finalName = `upload.${ext}`;
+            }
+            const file = new File([blob], finalName, { type: blob.type });
 
             const dt = new DataTransfer();
             dt.items.add(file);

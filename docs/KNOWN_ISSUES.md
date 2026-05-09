@@ -36,8 +36,9 @@ The anti-throttle offers zero protection against Chromium's OS/Renderer-level re
 1. **Memory Saver (Sleeping Tabs)**: This operates at the OS/Renderer level. When Chrome needs RAM, it acts like a grim reaper and completely kills the renderer process. The DOM is destroyed, the JavaScript engine is halted, and our anti-throttle `setInterval` is wiped from memory entirely. Chrome leaves a "tombstone" tab in the UI. If an agent tries to execute commands on a discarded tab, it will fail with "Cannot access a discarded tab." 
    * **Workaround:** The agent must use `browser_reload` or `browser_switch_tab` to wake the tab up before interacting with it.
 
-2. **Suspended Graphics (Occlusion Tracking / Minimized Windows)**: This operates at the GPU/Compositor level. Even if our anti-throttle is mutating the DOM every 15 seconds, if the window is completely minimized or 100% occluded by an Always-on-Top application, Chromium's compositor refuses to paint new frames to save GPU cycles. Because visual screenshots (`captureVisibleTab`) wait for the *next painted frame*, they will hang and timeout waiting for a paint that will never happen.
-   * **Workaround:** If screenshots are required but you want the browser hidden, use `browser_resize_window` to position the window completely off-screen (e.g., `left: -10000`, `top: -10000`) instead of minimizing it.
+2. **Suspended Graphics (Compositor Optimization)**: This operates at the GPU/Compositor level. While StealthDOM's CDP screenshot engine can successfully capture *existing* minimized windows, **newly created tabs** in a minimized window lack a graphics surface entirely. Chromium's compositor will refuse to paint the initial frame to save GPU cycles. 
+   * **Note on Occlusion vs Minimization**: If a window is simply covered (occluded) by another maximized app but not explicitly minimized to the taskbar, Windows DWM usually keeps the graphics canvas alive and screenshots on new tabs will succeed instantly.
+   * **Workaround**: If an agent attempts to screenshot a minimized new tab, the system will fail-fast in 4 seconds and return a deterministic error (`"Timed out. Window: minimized, graphics suspended. Either stop and tell user to restore window, or open a new tab with the force flag."`). The AI agent can then either ask the human user for help, or use `browser_new_tab` with `force_restore=true` to programmatically un-minimize the window. Alternatively, you can use `browser_resize_window` to position the window off-screen instead of minimizing it.
 
 ---
 
@@ -47,7 +48,7 @@ All previously documented issues have been resolved:
 
 | Issue | Resolution |
 |---|---|
-| Cross-frame DOM access (framesets, iframes) | Fixed in v3.0.2 — see [Architecture](../docs/01_architecture.md) |
-| `captureVisibleTab` quota errors | Eliminated in v3.2.0 — see [Screenshot Approaches](../docs/04_screenshot_approaches.md) |
+| Cross-frame DOM access (framesets, iframes) | Fixed in v3.0.2 — see [Architecture](01_architecture.md) |
+| `captureVisibleTab` quota errors | Eliminated in v3.2.0 |
 | Full-page screenshot stack overflow | Fixed in v3.0.1 |
-| Window focus steal during screenshots | Eliminated in v3.2.0 — see [Screenshot Approaches](../docs/04_screenshot_approaches.md) |
+| Window focus steal during screenshots | Eliminated in v3.2.0 |

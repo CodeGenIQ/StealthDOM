@@ -100,6 +100,21 @@ chrome.declarativeNetRequest.updateDynamicRules({
 - CSP protects against XSS — not relevant when you're intentionally injecting code
 - The stripping only affects pages loaded while the extension is active
 
+---
+
+## Design Decision: Natively Executing Wait Conditions
+
+The `waitForCondition` API allows the bridge to poll for dynamic DOM changes (e.g., waiting for an AI to finish typing). Initially, this was built using a complex cross-world bridge: the extension's secure `ISOLATED` world injected a `<script>` tag into the page's `MAIN` world, and they communicated by setting custom attributes on a hidden `<div>` observed by a `MutationObserver`.
+
+This approach was fragile and frequently timed out because Chrome's architecture strictly isolates variables between worlds — an `ISOLATED` script cannot read objects instantiated by a `MAIN` script. 
+
+**Solution:** Because StealthDOM's `declarativeNetRequest` rules actively strip CSP headers (which normally block `eval()` and inline scripts), cross-world injection is entirely unnecessary. `waitForCondition` now uses `chrome.scripting.executeScript` to evaluate code **directly and natively** within the `MAIN` world.
+
+**Why:**
+- **Zero latency:** Polling logic runs natively in the page without asynchronous message passing.
+- **Reliability:** No cross-world variable scoping bugs or attribute synchronization delays.
+- **Simplicity:** The observer is a simple `Promise` that resolves when the user-provided condition returns a truthy value, bypassing all extension-specific security boundaries.
+
 ### Enable/Disable Toggle
 
 StealthDOM includes a **popup toggle** (click the extension icon) to globally enable or disable the extension. When disabled, CSP headers are preserved and the bridge disconnects — restoring full browser security for normal browsing.
@@ -114,10 +129,6 @@ StealthDOM includes a **popup toggle** (click the extension icon) to globally en
 ## Design Decision: CDP Screenshots (v3.2.0)
 
 Chrome's `captureVisibleTab` API — the only extension API for screenshots — requires window focus and has a 2-call/sec rate limit. StealthDOM v3.2.0 replaced this with CDP-based screenshots via `chrome.debugger`, which renders directly from the compositor pipeline without any focus stealing or rate limits.
-
-The `captureVisibleTab` path is retained as an automatic fallback for the rare case when DevTools is already open on the target tab.
-
-For the full technical deep-dive, detection analysis, and comparison with alternative approaches, see [Screenshot Approaches](04_screenshot_approaches.md).
 
 ---
 
@@ -162,5 +173,5 @@ Chromium's Manifest V3 service workers can be terminated after ~30 seconds of in
 
 - [Why StealthDOM?](00_why_stealthdom.md) — The case for inside-the-browser automation
 - [Installation Guide](02_installation_guide.md) — Setup, MCP configuration, troubleshooting
-- [API Reference](03_api_reference.md) — Complete reference for all 57 MCP tools and WebSocket commands
-- [Screenshot Approaches](04_screenshot_approaches.md) — CDP screenshot architecture and detection analysis
+- [API Reference](03_api_reference.md) — Complete reference for all 50 MCP tools and WebSocket commands
+- [Window State Findings](04_window_state_findings.md) — CDP screenshot architecture and Chromium compositor rendering behaviors

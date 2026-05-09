@@ -1,0 +1,1783 @@
+[
+  {
+    "name": "browser_query",
+    "description": "Query DOM elements by CSS selector. Returns element details (tag, id, class, text, visibility).\n    \n    Args:\n        selector: CSS selector (e.g., '#my-id', '.my-class', 'div.container > p')\n        limit: Maximum number of elements to return (default 1, use 0 for all matching elements)\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "limit": {
+          "default": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "selector"
+      ],
+      "title": "browser_queryArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_read_content",
+    "description": "Read text or HTML content from a specific element or the entire page.\n    \n    Args:\n        selector: Optional CSS selector. If omitted, reads the entire page.\n        content_type: 'text' (default) for visible text, or 'html' for raw HTML.\n        max_length: Maximum characters to return (default 0 = no limit)\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
+        },
+        "content_type": {
+          "default": "text",
+          "title": "Content Type",
+          "type": "string"
+        },
+        "max_length": {
+          "default": 0,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id"
+      ],
+      "title": "browser_read_contentArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_get_attribute",
+    "description": "Get an HTML attribute value from a DOM element.\n    \n    Args:\n        selector: CSS selector\n        attribute: Attribute name (e.g., 'href', 'src', 'data-id')\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "attribute": {
+          "title": "Attribute",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "selector",
+        "attribute"
+      ],
+      "title": "browser_get_attributeArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_wait",
+    "description": "Wait for a DOM element, JS condition, or URL change.\n    \n    Args:\n        target: The CSS selector, JS condition code, or URL pattern to wait for.\n        wait_type: 'selector' (default), 'condition', or 'url'.\n        timeout: Maximum wait time in milliseconds (default 10000)\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "wait_type": {
+          "default": "selector",
+          "title": "Wait Type",
+          "type": "string"
+        },
+        "timeout": {
+          "default": 10000,
+          "title": "Timeout",
+          "type": "integer"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "target"
+      ],
+      "title": "browser_waitArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_get_bounding_rect",
+    "description": "Get the bounding rectangle (position and size) of a DOM element.\n    \n    Args:\n        selector: CSS selector\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "selector"
+      ],
+      "title": "browser_get_bounding_rectArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_execute_sequence",
+    "description": "Execute actions sequentially with zero latency.\n    \n    Args:\n        sequence: list of JSON objects mapping to native actions (e.g., [{\"action\": \"click\", \"selector\": \"...\"}, {\"action\": \"waitForSelector\", \"selector\": \"...\"}, {\"action\": \"fill\", \"selector\": \"...\", \"value\": \"...\"}]). Action names map directly to standard browser_* tools.\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "sequence": {
+          "items": {},
+          "title": "Sequence",
+          "type": "array"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "sequence"
+      ],
+      "title": "browser_execute_sequenceArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_click",
+    "description": "Click a DOM element. Element is scrolled into view first.\n    \n    Args:\n        selector: CSS selector of element to click\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "selector"
+      ],
+      "title": "browser_clickArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_type",
+    "description": "Type text into a DOM element (appends to existing content). Works with contenteditable divs.\n    \n    Args:\n        selector: CSS selector of element to type into\n        text: Text to type\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "selector",
+        "text"
+      ],
+      "title": "browser_typeArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_fill",
+    "description": "Clear and fill a form input or contenteditable element with new text.\n    \n    Args:\n        selector: CSS selector of input/textarea/contenteditable\n        value: Value to fill\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "selector",
+        "value"
+      ],
+      "title": "browser_fillArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_paste",
+    "description": "Instantly paste massive text payloads into an input or editor using native CDP.\n    Bypasses slow keystroke emulation and deprecated execCommand APIs.\n    \n    Args:\n        text: Text to paste\n        selector: Optional CSS selector to focus before pasting. If omitted, pastes into currently focused element.\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "text"
+      ],
+      "title": "browser_pasteArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_press",
+    "description": "Press a single keyboard key.\n    \n    Args:\n        key: Key to press (e.g., 'Enter', 'Tab', 'Escape', 'a')\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "key"
+      ],
+      "title": "browser_pressArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_key_combo",
+    "description": "Press a keyboard shortcut (key combination).\n    \n    Args:\n        keys: Comma-separated keys (e.g., 'Control,Shift,d' or 'Alt,Tab')\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "keys": {
+          "title": "Keys",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "keys"
+      ],
+      "title": "browser_key_comboArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_scroll_into_view",
+    "description": "Scroll an element smoothly into view (centered in viewport).\n    \n    Args:\n        selector: CSS selector of element to scroll to\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "selector"
+      ],
+      "title": "browser_scroll_into_viewArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_select",
+    "description": "Select an option in a dropdown/select element.\n    \n    Args:\n        selector: CSS selector of the select element\n        value: Value of the option to select\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "selector",
+        "value"
+      ],
+      "title": "browser_selectArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_hover",
+    "description": "Hover over a DOM element (triggers mouseenter, mouseover, mousemove).\n    Useful for revealing dropdown menus, tooltips, and hover-activated UI.\n\n    Args:\n        selector: CSS selector of element to hover over\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        }
+      },
+      "required": [
+        "tab_id",
+        "selector"
+      ],
+      "title": "browser_hoverArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_mouse_move",
+    "description": "Move mouse to coordinates via CDP (chrome.debugger + Input.dispatchMouseEvent).\n    Produces isTrusted: true events. Interpolates movement with random jitter for realism.\n    Use browser_get_bounding_rect to get target coordinates.\n\n    Args:\n        x: Target X coordinate (viewport pixels)\n        y: Target Y coordinate (viewport pixels)\n        steps: Number of intermediate points in the trajectory (default 10)\n        duration: Total movement time in milliseconds (default 300)\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "x": {
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "title": "Y",
+          "type": "integer"
+        },
+        "steps": {
+          "default": 10,
+          "title": "Steps",
+          "type": "integer"
+        },
+        "duration": {
+          "default": 300,
+          "title": "Duration",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tab_id",
+        "x",
+        "y"
+      ],
+      "title": "browser_mouse_moveArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_mouse_click",
+    "description": "Click at coordinates via CDP (chrome.debugger + Input.dispatchMouseEvent).\n    Produces isTrusted: true events. Supports left/right/middle and double-click.\n    Use browser_get_bounding_rect to get target coordinates.\n\n    Args:\n        x: Click X coordinate (viewport pixels)\n        y: Click Y coordinate (viewport pixels)\n        button: Mouse button \u2014 'left', 'right', or 'middle' (default 'left')\n        click_count: 1 for single click, 2 for double-click (default 1)\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "x": {
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "title": "Y",
+          "type": "integer"
+        },
+        "button": {
+          "default": "left",
+          "title": "Button",
+          "type": "string"
+        },
+        "click_count": {
+          "default": 1,
+          "title": "Click Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tab_id",
+        "x",
+        "y"
+      ],
+      "title": "browser_mouse_clickArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_mouse_down",
+    "description": "Press and hold mouse button at coordinates via CDP (chrome.debugger + Input.dispatchMouseEvent).\n    Produces isTrusted: true events. Use with browser_mouse_up for atomic hold/release.\n\n    Args:\n        x: Press X coordinate (viewport pixels)\n        y: Press Y coordinate (viewport pixels)\n        button: Mouse button \u2014 'left', 'right', or 'middle' (default 'left')\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "x": {
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "title": "Y",
+          "type": "integer"
+        },
+        "button": {
+          "default": "left",
+          "title": "Button",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tab_id",
+        "x",
+        "y"
+      ],
+      "title": "browser_mouse_downArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_mouse_up",
+    "description": "Release mouse button at coordinates via CDP (chrome.debugger + Input.dispatchMouseEvent).\n    Produces isTrusted: true events. Completes a hold started by browser_mouse_down.\n\n    Args:\n        x: Release X coordinate (viewport pixels)\n        y: Release Y coordinate (viewport pixels)\n        button: Mouse button \u2014 'left', 'right', or 'middle' (default 'left')\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "x": {
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "title": "Y",
+          "type": "integer"
+        },
+        "button": {
+          "default": "left",
+          "title": "Button",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tab_id",
+        "x",
+        "y"
+      ],
+      "title": "browser_mouse_upArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_mouse_drag",
+    "description": "Drag from one point to another via CDP (chrome.debugger + Input.dispatchMouseEvent).\n    Produces isTrusted: true events. Executes a full native drag sequence: move to start,\n    press, interpolated move to end, release \u2014 all in a single debugger session.\n    Use browser_get_bounding_rect to get coordinates for source and target elements.\n\n    Args:\n        start_x: Drag start X coordinate (viewport pixels)\n        start_y: Drag start Y coordinate (viewport pixels)\n        end_x: Drag end X coordinate (viewport pixels)\n        end_y: Drag end Y coordinate (viewport pixels)\n        steps: Number of intermediate movement points (default 20)\n        duration: Total drag time in milliseconds (default 500)\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "start_x": {
+          "title": "Start X",
+          "type": "integer"
+        },
+        "start_y": {
+          "title": "Start Y",
+          "type": "integer"
+        },
+        "end_x": {
+          "title": "End X",
+          "type": "integer"
+        },
+        "end_y": {
+          "title": "End Y",
+          "type": "integer"
+        },
+        "steps": {
+          "default": 20,
+          "title": "Steps",
+          "type": "integer"
+        },
+        "duration": {
+          "default": 500,
+          "title": "Duration",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tab_id",
+        "start_x",
+        "start_y",
+        "end_x",
+        "end_y"
+      ],
+      "title": "browser_mouse_dragArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_mouse_wheel",
+    "description": "Dispatch a native scroll wheel event via CDP (chrome.debugger + Input.dispatchMouseEvent).\n    Produces isTrusted: true events. Scrolls at the specified coordinates.\n\n    Args:\n        x: Wheel event X coordinate (viewport pixels)\n        y: Wheel event Y coordinate (viewport pixels)\n        delta_x: Horizontal scroll amount in pixels (default 0)\n        delta_y: Vertical scroll amount in pixels (positive = scroll down, default 0)\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "x": {
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "title": "Y",
+          "type": "integer"
+        },
+        "delta_x": {
+          "default": 0,
+          "title": "Delta X",
+          "type": "integer"
+        },
+        "delta_y": {
+          "default": 0,
+          "title": "Delta Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tab_id",
+        "x",
+        "y"
+      ],
+      "title": "browser_mouse_wheelArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_navigate",
+    "description": "Navigate the active tab to a URL.\n    \n    Args:\n        url: Full URL to navigate to (e.g., 'https://example.com')\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tab_id",
+        "url"
+      ],
+      "title": "browser_navigateArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_reload",
+    "description": "Reload the current page. PRO TIP: If a tab is dormant or sleeping (Memory Saver), use this to wake it up in the background without popping the browser up.\n    \n",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        }
+      },
+      "required": [
+        "tab_id"
+      ],
+      "title": "browser_reloadArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_back",
+    "description": "Go back in browser history.",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        }
+      },
+      "required": [
+        "tab_id"
+      ],
+      "title": "browser_backArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_screenshot",
+    "description": "Take a screenshot of the specified tab and save it to disk. Returns the file path.\n    Args:\n        absolute_save_path: Absolute file path to save the PNG (e.g., 'C:/tmp/page.png').\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "absolute_save_path": {
+          "title": "Absolute Save Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tab_id",
+        "absolute_save_path"
+      ],
+      "title": "browser_screenshotArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_screenshot_full_page",
+    "description": "Take a full-page screenshot via single-shot CDP rendering.\n    Args:\n        absolute_save_path: Absolute file path to save the PNG.\n        max_height: Maximum page height to capture in pixels (default 20000).\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "absolute_save_path": {
+          "title": "Absolute Save Path",
+          "type": "string"
+        },
+        "max_height": {
+          "default": 20000,
+          "title": "Max Height",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tab_id",
+        "absolute_save_path"
+      ],
+      "title": "browser_screenshot_full_pageArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_evaluate",
+    "description": "Execute arbitrary JavaScript code in the specified world context.\n    - MAIN (default): Standard page context (window, document).\n    - ISOLATED: Content script context (can access chrome.runtime, chrome.storage, etc).\n    \n    Args:\n        code: JavaScript code to evaluate\n        world: \"MAIN\" or \"ISOLATED\"\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "world": {
+          "default": "MAIN",
+          "title": "World",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tab_id",
+        "code"
+      ],
+      "title": "browser_evaluateArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_list_frames",
+    "description": "List all frames (iframes, framesets) in a tab. Returns URL, title, and body\n    presence for each frame. Essential for pages where standard tools return null\n    because the UI lives inside a <frame> or <iframe> (e.g., Gmail compose, OAuth dialogs).\n\n",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        }
+      },
+      "required": [
+        "tab_id"
+      ],
+      "title": "browser_list_framesArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_evaluate_all_frames",
+    "description": "Execute JavaScript in ALL frames of a tab and return per-frame results.\n    Use when the target content lives inside a <frame> or <iframe> and standard\n    browser_evaluate returns null. Each result includes frameIndex and frameId.\n\n    Args:\n        code: JavaScript code to evaluate in every frame\n        world: \"MAIN\" or \"ISOLATED\"\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "world": {
+          "default": "MAIN",
+          "title": "World",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tab_id",
+        "code"
+      ],
+      "title": "browser_evaluate_all_framesArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_list_tabs",
+    "description": "List all open browser tabs with their IDs, URLs, titles, active status, windowId, and incognito status.",
+    "inputSchema": {
+      "properties": {},
+      "title": "browser_list_tabsArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_new_tab",
+    "description": "Open a new browser tab.\n    \n    Args:\n        url: URL to open in the new tab (default: about:blank)\n        window_id: Optional virtual window ID to route the tab creation to a specific browser/window.\n        force_restore: If true, forcefully un-minimizes and restores the browser window (useful for screenshots).\n    ",
+    "inputSchema": {
+      "properties": {
+        "url": {
+          "default": "about:blank",
+          "title": "Url",
+          "type": "string"
+        },
+        "window_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Window Id"
+        },
+        "force_restore": {
+          "default": false,
+          "title": "Force Restore",
+          "type": "boolean"
+        }
+      },
+      "title": "browser_new_tabArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_close_tab",
+    "description": "Close a browser tab.\n    \n",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        }
+      },
+      "required": [
+        "tab_id"
+      ],
+      "title": "browser_close_tabArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_discard_tab",
+    "description": "Forcefully put a background tab into Memory Saver (sleeping) mode to free up RAM without closing it. Useful for cleaning up after heavy research tasks.",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        }
+      },
+      "required": [
+        "tab_id"
+      ],
+      "title": "browser_discard_tabArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_switch_tab",
+    "description": "Switch to (activate) a browser tab and focus its window. WARNING: Do NOT use this to wake sleeping tabs (use browser_reload). ONLY use this if the user asks you to 'show' them a tab.",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        }
+      },
+      "required": [
+        "tab_id"
+      ],
+      "title": "browser_switch_tabArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_new_window",
+    "description": "Open a new browser window in the user's profile (with cookies and sessions).\n    \n    Args:\n        url: URL to open in the new window (default: about:blank)\n    ",
+    "inputSchema": {
+      "properties": {
+        "url": {
+          "default": "about:blank",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "title": "browser_new_windowArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_new_incognito_window",
+    "description": "Open a new private/incognito browser window (clean session, no cookies).\n    Useful for testing without existing sessions or for isolated browsing.\n    \n    Args:\n        url: URL to open in the new incognito window (default: about:blank)\n    ",
+    "inputSchema": {
+      "properties": {
+        "url": {
+          "default": "about:blank",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "title": "browser_new_incognito_windowArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_close_window",
+    "description": "Close a browser window and all its tabs.\n    \n",
+    "inputSchema": {
+      "properties": {
+        "window_id": {
+          "title": "Window Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "window_id"
+      ],
+      "title": "browser_close_windowArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_resize_window",
+    "description": "Resize a browser window.\n    \n    Args:\n        width: New width in pixels\n        height: New height in pixels\n    ",
+    "inputSchema": {
+      "properties": {
+        "window_id": {
+          "title": "Window Id",
+          "type": "string"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height"
+        }
+      },
+      "required": [
+        "window_id"
+      ],
+      "title": "browser_resize_windowArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_start_net_capture",
+    "description": "Start capturing all network requests and response headers in the browser.",
+    "inputSchema": {
+      "properties": {},
+      "title": "browser_start_net_captureArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_stop_net_capture",
+    "description": "Stop the current network capture.",
+    "inputSchema": {
+      "properties": {},
+      "title": "browser_stop_net_captureArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_get_net_capture",
+    "description": "Retrieve all captured network requests and responses since capture started.",
+    "inputSchema": {
+      "properties": {},
+      "title": "browser_get_net_captureArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_get_cookies",
+    "description": "Get all cookies for a URL.\n\n    Args:\n        url: URL to get cookies for (e.g., 'https://example.com')\n    ",
+    "inputSchema": {
+      "properties": {
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "browser_get_cookiesArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_set_cookie",
+    "description": "Set a cookie in the browser.\n\n    Args:\n        url:             URL the cookie belongs to (e.g., 'https://example.com')\n        name:            Cookie name\n        value:           Cookie value\n        domain:          Optional cookie domain\n        path:            Optional cookie path (default '/')\n        secure:          Optional secure flag\n        http_only:       Optional httpOnly flag\n        expiration_date: Optional Unix timestamp for expiry\n    ",
+    "inputSchema": {
+      "properties": {
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        },
+        "domain": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Domain"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "secure": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secure"
+        },
+        "http_only": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Http Only"
+        },
+        "expiration_date": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expiration Date"
+        }
+      },
+      "required": [
+        "url",
+        "name",
+        "value"
+      ],
+      "title": "browser_set_cookieArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_delete_cookie",
+    "description": "Delete a cookie from the browser.\n\n    Args:\n        url:  URL the cookie belongs to (e.g., 'https://example.com')\n        name: Name of the cookie to delete\n    ",
+    "inputSchema": {
+      "properties": {
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "name"
+      ],
+      "title": "browser_delete_cookieArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_upload_file",
+    "description": "Set a file on an input[type=file] element using a data URL.\n    Use browser_evaluate to read a local file as base64 first, or construct\n    a data URL directly (e.g., 'data:image/png;base64,...').\n\n    Args:\n        selector:  CSS selector of the input[type=file] element\n        data_url:  Data URL of the file (e.g., 'data:image/png;base64,iVBOR...')\n        filename:  Optional filename (e.g. 'image.png'). Defaults to derived extension.\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "data_url": {
+          "title": "Data Url",
+          "type": "string"
+        },
+        "filename": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        }
+      },
+      "required": [
+        "tab_id",
+        "selector",
+        "data_url"
+      ],
+      "title": "browser_upload_fileArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_upload_file_cdp",
+    "description": "Natively set files on an input[type=file] element using CDP.\n    Produces isTrusted: true events, bypassing anti-bot synthetic event checks.\n    \n    Args:\n        selector:   CSS selector of the input[type=file] element\n        file_paths: Optional list of absolute file paths to upload (e.g., [\"C:/path/to/img.png\"])\n        data_urls:  Optional list of base64 data URLs to upload (e.g., [\"data:image/png;base64,...\"])\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "file_paths": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File Paths"
+        },
+        "data_urls": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Urls"
+        }
+      },
+      "required": [
+        "tab_id",
+        "selector"
+      ],
+      "title": "browser_upload_file_cdpArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_proxy_fetch",
+    "description": "Perform an HTTP request through the browser's fetch() API.\n    Uses the real browser's TLS fingerprint (JA3/JA4), cookies, and session \u2014 bypasses\n    Cloudflare and other bot-detection systems that check TLS fingerprints.\n\n    Args:\n        url:       URL to fetch\n        method:    HTTP method (default 'GET')\n        headers:   Optional dict of request headers\n        body:      Optional request body\n        body_type: How to encode the body: 'json', 'text', 'formdata', or 'base64file'\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "title": "Tab Id",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "method": {
+          "default": "GET",
+          "title": "Method",
+          "type": "string"
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Headers"
+        },
+        "body": {
+          "default": null,
+          "title": "Body"
+        },
+        "body_type": {
+          "default": "json",
+          "title": "Body Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tab_id",
+        "url"
+      ],
+      "title": "browser_proxy_fetchArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_handle_dialog",
+    "description": "Accept or dismiss a native JavaScript dialog (alert, confirm, prompt).\n    \n    Args:\n        accept: True to accept (click OK), False to dismiss (click Cancel)\n        prompt_text: Optional text to enter into a prompt dialog\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        },
+        "accept": {
+          "default": true,
+          "title": "Accept",
+          "type": "boolean"
+        },
+        "prompt_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Text"
+        }
+      },
+      "required": [
+        "tab_id"
+      ],
+      "title": "browser_handle_dialogArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_get_dialog",
+    "description": "Check if there is an active native JavaScript dialog (alert, confirm, prompt) on the tab.\n    \n    Args:\n        \n    Returns:\n        JSON string containing dialog details if one is open:\n        { \"message\": \"...\", \"type\": \"alert/confirm/prompt\", \"defaultPrompt\": \"...\" }\n        Or a message saying no dialog is active.\n    ",
+    "inputSchema": {
+      "properties": {
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Tab Id"
+        }
+      },
+      "required": [
+        "tab_id"
+      ],
+      "title": "browser_get_dialogArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "browser_toggle_asset_blocking",
+    "description": "Toggle global Declarative Net Request (DNR) asset blocking for speed and stealth.\n    \n    Args:\n        enable: True to enable blocking, False to disable\n        block_fonts: Block heavy fonts\n        block_images: Block images (breaks vision models, but massively speeds up load)\n        block_trackers: Block analytics, pixels, and telemetry pings\n    ",
+    "inputSchema": {
+      "properties": {
+        "enable": {
+          "title": "Enable",
+          "type": "boolean"
+        },
+        "block_fonts": {
+          "default": true,
+          "title": "Block Fonts",
+          "type": "boolean"
+        },
+        "block_images": {
+          "default": false,
+          "title": "Block Images",
+          "type": "boolean"
+        },
+        "block_trackers": {
+          "default": true,
+          "title": "Block Trackers",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enable"
+      ],
+      "title": "browser_toggle_asset_blockingArguments",
+      "type": "object"
+    }
+  }
+]
