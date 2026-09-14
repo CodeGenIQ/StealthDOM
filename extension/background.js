@@ -466,6 +466,10 @@ async function handleBackgroundCommand(msg) {
         case 'mouseWheelCDP':
             return await cmdMouseWheelCDP(msg.tabId, msg.x, msg.y, msg.deltaX, msg.deltaY);
 
+        // === Dialogs (CDP) ===
+        case 'handleDialog':
+            return await cmdHandleDialog(msg.tabId, msg.accept, msg.promptText);
+
         // === Cookies ===
         case 'getCookies':
             return await cmdGetCookies(msg.url, msg.tabId, msg.storeId);
@@ -692,6 +696,7 @@ async function bridgeRouteCommand(msg) {
         'ping', 'hover', 'removeByText', 'handleDialog', 'getActiveDialog',
         'proxyFetch',
         'waitForUrl',
+        'handleDialog',
     ];
 
     try {
@@ -1622,18 +1627,57 @@ async function cmdMouseWheelCDP(tabId, x, y, deltaX = 0, deltaY = 0) {
 }
 
 // ==========================================
+// Native JavaScript Dialogs (CDP)
+// ==========================================
+
+/**
+ * Handle a native JavaScript dialog (alert, confirm, prompt, beforeunload) via CDP.
+ *
+ * @param {number} tabId - Target tab ID
+ * @param {boolean} accept - True to accept/OK/Leave, False to dismiss/Cancel
+ * @param {string|null} promptText - Optional text to enter into prompt dialog
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function cmdHandleDialog(tabId, accept = true, promptText = null) {
+    if (!tabId) return { success: false, error: 'tabId required' };
+
+    try {
+        return await withDebugger(tabId, async (target) => {
+            // Enable Page domain to access dialog control
+            await chrome.debugger.sendCommand(target, 'Page.enable');
+
+            const params = { accept: accept !== false };
+            if (promptText !== undefined && promptText !== null) {
+                params.promptText = promptText;
+            }
+            await chrome.debugger.sendCommand(target, 'Page.handleJavaScriptDialog', params);
+            return {
+                success: true,
+                data: { accept: params.accept, promptText: params.promptText }
+            };
+        });
+    } catch (e) {
+        return { success: false, error: `Handle dialog failed: ${e.message}` };
+    }
+}
+
+
+// ==========================================
 // Cookies
 // ==========================================
+
 
 async function cmdGetCookies(url, tabId, storeId) {
     if (!url) {
         return { success: false, error: 'url required' };
     }
     const query = { url };
+    let debugTab = null;
     if (storeId) {
         query.storeId = storeId;
     } else if (tabId) {
         const tab = await chrome.tabs.get(tabId);
+        debugTab = tab;
         if (tab && tab.cookieStoreId) {
             query.storeId = tab.cookieStoreId;
         }
@@ -1641,6 +1685,8 @@ async function cmdGetCookies(url, tabId, storeId) {
     const cookies = await chrome.cookies.getAll(query);
     return {
         success: true,
+        _debug_query: query,
+        _debug_tab: debugTab,
         data: cookies.map(c => ({
             name: c.name,
             value: c.value,
@@ -1657,15 +1703,31 @@ async function cmdSetCookie(details) {
     if (!details || !details.url) {
         return { success: false, error: 'details with url required' };
     }
+    if (details.tabId && !details.storeId) {
+        const tab = await chrome.tabs.get(details.tabId);
+        if (tab && tab.cookieStoreId) {
+            details.storeId = tab.cookieStoreId;
+        }
+    }
+    delete details.tabId; // chrome.cookies.set doesn't take tabId
     const cookie = await chrome.cookies.set(details);
     return { success: true, data: cookie };
 }
 
-async function cmdDeleteCookie(url, name) {
+async function cmdDeleteCookie(url, name, tabId, storeId) {
     if (!url || !name) {
         return { success: false, error: 'url and name required' };
     }
-    await chrome.cookies.remove({ url, name });
+    const details = { url, name };
+    if (storeId) {
+        details.storeId = storeId;
+    } else if (tabId) {
+        const tab = await chrome.tabs.get(tabId);
+        if (tab && tab.cookieStoreId) {
+            details.storeId = tab.cookieStoreId;
+        }
+    }
+    await chrome.cookies.remove(details);
     return { success: true };
 }
 

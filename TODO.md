@@ -38,6 +38,16 @@
     - [ ] Create a "Mock Redirect" local handler to bypass MV3 body-replacement restrictions.
     - [ ] **Use Cases**: Anti-Telemetry Cloak (block `/log` pings), API Hijacking (injecting data into JSON responses), and Credential Shielding (blocking unauthorized secret transmission).
 
+## Enterprise Web App & Cloud Console Interaction Enhancements
+> [!NOTE]
+> Based on field testing with Oracle Cloud Infrastructure, Google Cloud, and embedded xterm.js terminals. See detailed spec in `docs/05_enterprise_interaction_enhancements.md`.
+
+- [ ] **Transparent Iframe / Nested Context Traversal**: Automatically traverse child iframes in `browser_query`, `browser_click`, `browser_type`, `browser_get_text`, and `browser_fill` without requiring manual JS traversal.
+- [ ] **Terminal & Code Editor Input Mode**: Add `mode="paste"` / `mode="cdp_raw"` to `browser_type` / `browser_fill` (or dedicated `browser_terminal_send`) to seamlessly type/paste into xterm.js, Monaco, and canvas components via synthetic `ClipboardEvent` and CDP `Input.insertText`.
+- [ ] **Automatic Shadow DOM Piercing**: Support recursive `#shadow-root` traversal for enterprise web components in all selector queries.
+- [ ] **2-Tier Resilient Click Strategy**: In `browser_click`, auto-scroll target into view, attempt CDP coordinate click, and fallback to DOM `.click()` if obscured by overlays or notification banners.
+- [ ] **Single-Roundtrip Action Verification**: Add optional `screenshot_after=True` parameter to interaction tools to eliminate separate `browser_screenshot` roundtrips for vision models.
+
 ## Architectural Ideas
 - [ ] **JavaScript Render Composition Fallback (html2canvas)**
   - **Description**: If CDP `captureScreenshot` fails (e.g., because the browser is fully occluded or minimized), automatically inject a library like `html2canvas` into the content script to manually read the DOM tree and paint it onto an HTML5 `<canvas>`.
