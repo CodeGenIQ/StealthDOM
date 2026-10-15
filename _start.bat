@@ -33,7 +33,7 @@ echo.
 
 :: ── Check if bridge_server.py is already running ─────────────────────────────
 set "BRIDGE_PID="
-for /f %%P in ('powershell -NoProfile -Command "Get-WmiObject Win32_Process | Where-Object {$_.CommandLine -like '*bridge_server.py*'} | Select-Object -First 1 -ExpandProperty ProcessId"') do set "BRIDGE_PID=%%P"
+for /f %%P in ('powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name LIKE 'python%%'\" | Where-Object {$_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -like '*bridge_server.py*'} | Select-Object -First 1 -ExpandProperty ProcessId"') do set "BRIDGE_PID=%%P"
 
 if defined BRIDGE_PID (
     echo [StealthDOM] Bridge is already running ^(PID: %BRIDGE_PID%^).

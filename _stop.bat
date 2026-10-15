@@ -10,14 +10,20 @@ echo [StealthDOM] ================================================
 echo.
 
 :: ── Find and kill bridge_server.py process ───────────────────────────────────
-:: Uses full commandline match so other Python scripts are never touched.
+:: Uses CIM + Name filter + $PID exclusion to avoid matching the query itself.
 set "BRIDGE_PID="
-for /f %%P in ('powershell -NoProfile -Command "Get-WmiObject Win32_Process | Where-Object {$_.CommandLine -like '*bridge_server.py*'} | Select-Object -First 1 -ExpandProperty ProcessId"') do set "BRIDGE_PID=%%P"
+for /f %%P in ('powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name LIKE 'python%%'\" | Where-Object {$_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -like '*bridge_server.py*'} | Select-Object -First 1 -ExpandProperty ProcessId"') do set "BRIDGE_PID=%%P"
 
 if defined BRIDGE_PID (
-    echo [StealthDOM] Found bridge at PID %BRIDGE_PID% — terminating...
-    taskkill /PID %BRIDGE_PID% /F >nul 2>&1
-    echo [StealthDOM] Process terminated.
+    :: Validate the PID is actually alive before killing
+    tasklist /FI "PID eq %BRIDGE_PID%" 2>nul | findstr /I "python" >nul 2>&1
+    if not errorlevel 1 (
+        echo [StealthDOM] Found bridge at PID %BRIDGE_PID% — terminating...
+        taskkill /PID %BRIDGE_PID% /F >nul 2>&1
+        echo [StealthDOM] Process terminated.
+    ) else (
+        echo [StealthDOM] Bridge is not running. ^(stale PID %BRIDGE_PID% ignored^)
+    )
 ) else (
     echo [StealthDOM] Bridge is not running.
 )
