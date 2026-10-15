@@ -1,6 +1,8 @@
 # Agent Instructions — StealthDOM
 
 > Any AI agent starting work on this project MUST read this file first.
+> **Master Knowledge Hub Reference**: [`../Knowledge/MASTER_INDEX.md`](../Knowledge/MASTER_INDEX.md) · Runbook: [`../Knowledge/shared_tools/stealth_dom.md`](../Knowledge/shared_tools/stealth_dom.md)
+> **Scratch Folder**: Use `scratch/` for all temporary test scripts and artifacts.
 
 ---
 
