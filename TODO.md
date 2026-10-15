@@ -81,6 +81,21 @@
 
 ---
 
+## Phase 7 — Enterprise & Cloud Console Enhancements (Spec Codified)
+
+> [!NOTE]
+> Based on field testing with Oracle Cloud Infrastructure, Google Cloud, and embedded xterm.js terminals. See detailed spec in [docs/05_enterprise_interaction_enhancements.md](docs/05_enterprise_interaction_enhancements.md).
+
+- [ ] **#30 — Transparent Iframe / Nested Context Traversal**: Automatically traverse child iframes in `browser_query`, `browser_click`, `browser_type`, `browser_get_text`, and `browser_fill` without requiring manual JS traversal.
+- [ ] **#31 — Terminal & Code Editor Input Mode**: Add `mode="paste"` / `mode="cdp_raw"` to `browser_type` / `browser_fill` (or dedicated `browser_terminal_send`) to seamlessly type/paste into xterm.js, Monaco, and canvas components via synthetic `ClipboardEvent` and CDP `Input.insertText`.
+- [ ] **#32 — Automatic Shadow DOM Piercing**: Support recursive `#shadow-root` traversal for enterprise web components in all selector queries.
+- [ ] **#33 — 2-Tier Resilient Click Strategy**: In `browser_click`, auto-scroll target into view, attempt CDP coordinate click, and fallback to DOM `.click()` if obscured by overlays or notification banners.
+- [ ] **#34 — Single-Roundtrip Action Verification**: Add optional `screenshot_after=True` parameter to interaction tools to eliminate separate `browser_screenshot` roundtrips for vision models.
+- [ ] **#35 — JavaScript Render Composition Fallback (`html2canvas`)**: If CDP `captureScreenshot` fails (e.g., because the browser is fully occluded or minimized), inject `html2canvas` into the content script to manually read the DOM tree and paint it onto an HTML5 `<canvas>`.
+- [ ] **#36 — Built-in Rotating Proxy Pool Management**: Automated pipeline to fetch, test/verify connectivity, and maintain a rotating pool of healthy proxies for the extension to use (expands on #12).
+
+---
+
 ## Completed & Integrated (Archive)
 
 - [x] **Handle Native JavaScript Dialogs (`browser_handle_dialog`)**: CDP interception of `alert/confirm/prompt`.

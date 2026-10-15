@@ -823,11 +823,13 @@ Get all cookies for a URL.
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `url` | string | ✅ | — | URL to get cookies for (e.g., `https://example.com`) |
+| `tabId` | integer or string | — | — | Optional tab ID to get cookies from a specific window's cookie store (e.g., incognito) |
 
 ```json
 { "action": "getCookies", "url": "https://example.com" }
+{ "action": "getCookies", "url": "https://example.com", "tabId": 123 }
 ```
-**MCP Tool:** `browser_get_cookies(url)`  
+**MCP Tool:** `browser_get_cookies(url, tab_id=None)`  
 **Handled by:** Background
 
 ---
@@ -837,12 +839,13 @@ Set a cookie.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `details` | object | ✅ | — | Cookie details: `{ url, name, value, domain, path, ... }` |
+| `details` | object | ✅ | — | Cookie details: `{ url, name, value, domain, path, tabId, ... }` |
 
 ```json
 { "action": "setCookie", "details": { "url": "https://example.com", "name": "token", "value": "abc123" } }
+{ "action": "setCookie", "details": { "url": "https://example.com", "name": "token", "value": "abc123", "tabId": 123 } }
 ```
-**MCP Tool:** `browser_set_cookie(url, name, value, domain=None, path='/', secure=None, http_only=None, expiration_date=None)`  
+**MCP Tool:** `browser_set_cookie(url, name, value, domain=None, path='/', secure=None, http_only=None, expiration_date=None, tab_id=None)`  
 **Handled by:** Background
 
 ---
@@ -854,11 +857,13 @@ Delete a cookie.
 |-----------|------|----------|---------|-------------|
 | `url` | string | ✅ | — | URL the cookie belongs to |
 | `name` | string | ✅ | — | Cookie name |
+| `tabId` | integer or string | — | — | Optional tab ID to target a specific window's cookie store (e.g., incognito) |
 
 ```json
 { "action": "deleteCookie", "url": "https://example.com", "name": "token" }
+{ "action": "deleteCookie", "url": "https://example.com", "name": "token", "tabId": 123 }
 ```
-**MCP Tool:** `browser_delete_cookie(url, name)`  
+**MCP Tool:** `browser_delete_cookie(url, name, tab_id=None)`  
 **Handled by:** Background
 
 ---

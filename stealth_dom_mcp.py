@@ -924,9 +924,25 @@ async def browser_switch_tab(tab_id: int | str) -> str:
     return f"Switched to tab {tab_id}"
 
 
+@mcp.tool()
+async def browser_handle_dialog(tab_id: int | str, accept: bool = True, prompt_text: str | None = None) -> str:
+    """Accept or dismiss a native JavaScript dialog (alert, confirm, prompt, beforeunload).
+    
+    Args:
+        tab_id: ID of the tab (get from browser_list_tabs)
+        accept: True to accept/OK/Leave, False to dismiss/Cancel
+        prompt_text: Optional text to enter into a prompt dialog
+    """
+    result = await send_command("handleDialog", tabId=tab_id, accept=accept, promptText=prompt_text)
+    if not result.get("success"):
+        return f"Error: {result.get('error')}"
+    return "Dialog handled successfully"
+
+
 # ==========================================
 # Window Management Tools
 # ==========================================
+
 
 @mcp.tool()
 async def browser_new_window(url: str = "about:blank") -> str:
@@ -1021,13 +1037,17 @@ async def browser_get_net_capture() -> str:
 # ==========================================
 
 @mcp.tool()
-async def browser_get_cookies(url: str) -> str:
+async def browser_get_cookies(url: str, tab_id: int | str | None = None) -> str:
     """Get all cookies for a URL.
 
     Args:
         url: URL to get cookies for (e.g., 'https://example.com')
+        tab_id: Optional ID of the tab to get cookies for. If provided, respects incognito/container contexts.
     """
-    result = await send_command("getCookies", url=url)
+    kwargs = {"url": url}
+    if tab_id is not None:
+        kwargs["tabId"] = tab_id
+    result = await send_command("getCookies", **kwargs)
     if not result.get("success"):
         return f"Error: {result.get('error')}"
     return json.dumps(result.get("data"), indent=2)
@@ -1043,6 +1063,7 @@ async def browser_set_cookie(
     secure: bool | None = None,
     http_only: bool | None = None,
     expiration_date: float | None = None,
+    tab_id: int | str | None = None,
 ) -> str:
     """Set a cookie in the browser.
 
@@ -1055,6 +1076,7 @@ async def browser_set_cookie(
         secure:          Optional secure flag
         http_only:       Optional httpOnly flag
         expiration_date: Optional Unix timestamp for expiry
+        tab_id:          Optional ID of the tab (to set cookie in incognito context)
     """
     details: dict = {"url": url, "name": name, "value": value}
     if domain is not None:
@@ -1067,6 +1089,8 @@ async def browser_set_cookie(
         details["httpOnly"] = http_only
     if expiration_date is not None:
         details["expirationDate"] = expiration_date
+    if tab_id is not None:
+        details["tabId"] = tab_id
     result = await send_command("setCookie", details=details)
     if not result.get("success"):
         return f"Error: {result.get('error')}"
@@ -1074,14 +1098,18 @@ async def browser_set_cookie(
 
 
 @mcp.tool()
-async def browser_delete_cookie(url: str, name: str) -> str:
+async def browser_delete_cookie(url: str, name: str, tab_id: int | str | None = None) -> str:
     """Delete a cookie from the browser.
 
     Args:
         url:  URL the cookie belongs to (e.g., 'https://example.com')
         name: Name of the cookie to delete
+        tab_id: Optional ID of the tab (to delete cookie from incognito context)
     """
-    result = await send_command("deleteCookie", url=url, name=name)
+    kwargs = {"url": url, "name": name}
+    if tab_id is not None:
+        kwargs["tabId"] = tab_id
+    result = await send_command("deleteCookie", **kwargs)
     if not result.get("success"):
         return f"Error: {result.get('error')}"
     return f"Cookie '{name}' deleted"
