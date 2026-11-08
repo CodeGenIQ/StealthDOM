@@ -35,6 +35,7 @@ See `.agents/workflows/` for the full step-by-step instructions for each.
 - **ALWAYS regenerate `tool_schema_dump.json`** after any MCP tool change — see `.agents/skills/regen_schema.md`
 - **DO NOT push to GitHub** — commit only. Leave push for the user.
 - **ONE TODO at a time** — complete and ship before starting the next
+- **NEVER ask the user to manually reload the extension in `brave://extensions`** — after modifying `extension/`, always hot-reload it yourself by sending `{"_msg_id": "rel-1", "action": "reloadExtension"}` to `ws://127.0.0.1:9878` (or opening `chrome-extension://<ext_id>/parked.html?reloadExtension=1` via `newTab`, looking up `<ext_id>` in the browser profile's `Secure Preferences`).
 
 ---
 

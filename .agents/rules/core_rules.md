@@ -21,3 +21,4 @@ These rules apply to ALL agents working on this project, regardless of which wor
 10. The tool count in every doc, the MCP instructions string, and the capabilities resource MUST all agree after every change.
 11. `tool_schema_dump.json` MUST be regenerated after any MCP tool change — it is used by the `scratch_check_docs.py` validator.
 12. MCP docstrings must be compressed per `.agents/skills/compress_docstrings.md`. Verbose docstrings waste tokens on every single agent interaction.
+13. NEVER ask the user to open `brave://extensions` or `chrome://extensions` to click Reload after editing `extension/` files. Always trigger a programmatic hot-reload via `{"_msg_id": "rel-1", "action": "reloadExtension"}` on `ws://127.0.0.1:9878` (or by opening `chrome-extension://<ext_id>/parked.html?reloadExtension=1`).
