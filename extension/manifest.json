@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "StealthDOM",
-  "version": "3.3.0",
-  "description": "StealthDOM: Undetectable browser automation via WebSocket bridge",
+  "version": "3.4.0",
+  "description": "StealthDOM: Undetectable browser automation & Tab Memory Governor via WebSocket bridge",
   "permissions": [
     "tabs",
     "cookies",

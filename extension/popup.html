@@ -6,58 +6,92 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      width: 260px;
+      width: 310px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #1a1a2e;
-      color: #e0e0e0;
-      padding: 16px;
+      background: #141829;
+      color: #e2e8f0;
+      padding: 14px;
+      user-select: none;
     }
 
     .header {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 16px;
+      gap: 9px;
+      margin-bottom: 12px;
     }
 
     .header img {
-      width: 28px;
-      height: 28px;
+      width: 24px;
+      height: 24px;
     }
 
     .header h1 {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
       color: #fff;
     }
 
     .header .version {
       font-size: 11px;
-      color: #888;
+      color: #64748b;
       margin-left: auto;
     }
 
-    /* Toggle Switch */
-    .toggle-row {
+    .section-card {
+      background: #1b2238;
+      border: 1px solid #26304d;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+
+    .section-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: #16213e;
-      border-radius: 10px;
-      padding: 12px 14px;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
 
-    .toggle-label {
-      font-size: 13px;
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #94a3b8;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 0;
+      font-size: 12px;
+    }
+
+    .row + .row {
+      border-top: 1px solid #232d47;
+    }
+
+    .row-label {
+      color: #cbd5e1;
       font-weight: 500;
     }
 
+    .row-sub {
+      font-size: 10px;
+      color: #64748b;
+      display: block;
+      margin-top: 1px;
+    }
+
+    /* Toggle Switch */
     .toggle-switch {
       position: relative;
-      width: 44px;
-      height: 24px;
+      width: 38px;
+      height: 20px;
       cursor: pointer;
+      flex-shrink: 0;
     }
 
     .toggle-switch input {
@@ -67,40 +101,40 @@
     .toggle-slider {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: #444;
-      border-radius: 12px;
-      transition: background 0.3s;
+      background: #334155;
+      border-radius: 10px;
+      transition: background 0.2s;
     }
 
     .toggle-slider::before {
       content: '';
       position: absolute;
-      width: 18px;
-      height: 18px;
+      width: 14px;
+      height: 14px;
       left: 3px;
       bottom: 3px;
       background: #fff;
       border-radius: 50%;
-      transition: transform 0.3s;
+      transition: transform 0.2s;
     }
 
     .toggle-switch input:checked + .toggle-slider {
-      background: #0f3460;
+      background: #2563eb;
     }
 
     .toggle-switch input:checked + .toggle-slider::before {
-      transform: translateX(20px);
+      transform: translateX(18px);
     }
 
-    /* Status */
+    /* Status Pill */
     .status {
       display: flex;
       align-items: center;
       gap: 8px;
-      background: #16213e;
-      border-radius: 10px;
-      padding: 10px 14px;
-      font-size: 12px;
+      font-size: 11.5px;
+      padding-top: 6px;
+      margin-top: 6px;
+      border-top: 1px solid #232d47;
     }
 
     .status-dot {
@@ -116,7 +150,7 @@
     }
 
     .status-dot.disconnected {
-      background: #666;
+      background: #64748b;
     }
 
     .status-dot.disabled {
@@ -125,7 +159,124 @@
     }
 
     .status-text {
-      color: #aaa;
+      color: #94a3b8;
+    }
+
+    /* Telemetry & Action Button */
+    .telemetry-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #111625;
+      border-radius: 7px;
+      padding: 7px 10px;
+      margin-bottom: 8px;
+      font-size: 11.5px;
+    }
+
+    .telemetry-metric {
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+
+    .telemetry-metric span.awake {
+      color: #38bdf8;
+    }
+
+    .telemetry-metric span.asleep {
+      color: #4ade80;
+    }
+
+    .btn-primary {
+      width: 100%;
+      background: #2563eb;
+      color: #ffffff;
+      border: none;
+      border-radius: 7px;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 8px;
+      transition: background 0.15s;
+    }
+
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-primary:active {
+      background: #1e40af;
+    }
+
+    .btn-secondary {
+      width: 100%;
+      background: #24304d;
+      color: #cbd5e1;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 5px;
+      transition: background 0.15s;
+    }
+
+    .btn-secondary:hover {
+      background: #2e3d61;
+      color: #fff;
+    }
+
+    /* Inputs & Selects */
+    .num-input, .select-input {
+      background: #111625;
+      color: #f8fafc;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 3px 7px;
+      font-size: 12px;
+      font-weight: 600;
+      outline: none;
+    }
+
+    .num-input {
+      width: 58px;
+      text-align: center;
+    }
+
+    .select-input {
+      width: 102px;
+    }
+
+    .num-input:focus, .select-input:focus, .domain-input:focus {
+      border-color: #3b82f6;
+    }
+
+    .domain-block {
+      padding-top: 6px;
+      margin-top: 4px;
+      border-top: 1px solid #232d47;
+    }
+
+    .domain-label {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .domain-input {
+      width: 100%;
+      background: #111625;
+      color: #f8fafc;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-family: Consolas, monospace;
+      outline: none;
     }
   </style>
 </head>
@@ -133,20 +284,114 @@
   <div class="header">
     <img src="icon48.png" alt="StealthDOM">
     <h1>StealthDOM</h1>
-    <span class="version">v2.4.0</span>
+    <span class="version">v3.4.0</span>
   </div>
 
-  <div class="toggle-row">
-    <span class="toggle-label">Enabled</span>
-    <label class="toggle-switch">
-      <input type="checkbox" id="toggleEnabled" checked>
-      <span class="toggle-slider"></span>
-    </label>
+  <!-- Bridge Control Card -->
+  <div class="section-card">
+    <div class="row" style="padding-top: 0;">
+      <span class="row-label">Automation Bridge</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggleEnabled" checked>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="status">
+      <span class="status-dot disconnected" id="statusDot"></span>
+      <span class="status-text" id="statusText">Checking...</span>
+    </div>
   </div>
 
-  <div class="status">
-    <span class="status-dot disconnected" id="statusDot"></span>
-    <span class="status-text" id="statusText">Checking...</span>
+  <!-- Memory Saver & Tab Governor Card -->
+  <div class="section-card" style="margin-bottom: 0;">
+    <div class="section-header">
+      <span class="section-title">Memory Saver &amp; Tab Governor</span>
+      <label class="toggle-switch" title="Enable automatic tab unloading">
+        <input type="checkbox" id="govEnabled" checked>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="telemetry-bar">
+      <div class="telemetry-metric" id="govStatsText">
+        Loaded: <span class="awake" id="statLoaded">-</span> &middot; Sleeping: <span class="asleep" id="statSleeping">-</span>
+      </div>
+      <span id="statParked" style="font-size: 10.5px; color: #94a3b8;"></span>
+    </div>
+
+    <button class="btn-primary" id="btnSleepNow">⚡ Sleep All Inactive Tabs Now</button>
+
+    <div class="row">
+      <div>
+        <span class="row-label">Max Loaded Tabs</span>
+        <span class="row-sub">0 = unlimited</span>
+      </div>
+      <input type="number" id="govMaxTabs" class="num-input" min="0" max="30" step="1" value="3">
+    </div>
+
+    <div class="row">
+      <div>
+        <span class="row-label">Sleep Inactive After</span>
+        <span class="row-sub">Background &amp; minimized</span>
+      </div>
+      <select id="govTimeoutMin" class="select-input">
+        <option value="1">1 min</option>
+        <option value="2">2 min</option>
+        <option value="5" selected>5 min</option>
+        <option value="10">10 min</option>
+        <option value="15">15 min</option>
+        <option value="30">30 min</option>
+        <option value="60">60 min</option>
+        <option value="0">Timer Off</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <div>
+        <span class="row-label">Sleep Minimized Windows</span>
+        <span class="row-sub">Unloads front tab when minimized</span>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="govSleepMinimized" checked>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="row">
+      <span class="row-label">Protect Pinned Tabs</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="govProtectPinned" checked>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="row">
+      <span class="row-label">Protect Audio Tabs</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="govProtectAudio">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="row">
+      <div>
+        <span class="row-label">Auto-Wake for AI Agent</span>
+        <span class="row-sub">Wakes tab on MCP command</span>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="govAutoWakeAgent" checked>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="domain-block">
+      <div class="domain-label">
+        <span>Never-Sleep Domains</span>
+        <span id="saveIndicator" style="color: #4ade80; opacity: 0; transition: opacity 0.2s;">Saved</span>
+      </div>
+      <input type="text" id="govWhitelist" class="domain-input" placeholder="e.g. tradingview.com, localhost">
+      <button class="btn-secondary" id="btnExcludeCurrent">+ Exclude Current Tab Domain</button>
+    </div>
   </div>
 
   <script src="popup.js"></script>

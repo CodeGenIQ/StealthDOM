@@ -433,6 +433,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         });
         return true;
     }
+    if (msg.type === 'getGovernorState') {
+        getGovernorStateAndStats()
+            .then(res => sendResponse(res))
+            .catch(err => sendResponse({ ok: false, error: err.message }));
+        return true;
+    }
+    if (msg.type === 'setGovernorConfig') {
+        setGovernorConfig(msg.config)
+            .then(res => sendResponse(res))
+            .catch(err => sendResponse({ ok: false, error: err.message }));
+        return true;
+    }
+    if (msg.type === 'sleepAllInactiveNow') {
+        sleepAllInactiveTabsNow()
+            .then(res => sendResponse(res))
+            .catch(err => sendResponse({ ok: false, error: err.message }));
+        return true;
+    }
+    if (msg.type === 'restoreParkedWindow') {
+        const senderTabId = sender && sender.tab ? sender.tab.id : null;
+        restoreParkedMinimizedWindow(msg.windowId, msg.parkedTabId, senderTabId)
+            .then(res => sendResponse(res))
+            .catch(err => sendResponse({ ok: false, error: err.message }));
+        return true;
+    }
 
     if (msg.target !== 'background') return false;
 
@@ -766,6 +791,26 @@ async function bridgeRouteCommand(msg) {
 
     const { action } = msg;
 
+    // Resolve any discarded tab ID alias and record agent activity
+    if (msg.tabId !== undefined && msg.tabId !== null) {
+        msg.tabId = resolveDiscardedTabAlias(Number(msg.tabId));
+        markTabActivity(msg.tabId, true);
+    }
+
+    const nonWakeActions = [
+        'listTabs', 'newTab', 'closeTab', 'discardTab', 'reloadTab',
+        'switchTab', 'navigate', 'newWindow', 'newIncognitoWindow', 'closeWindow',
+    ];
+    if (
+        _governorConfig.autoWakeForAgent &&
+        msg.tabId !== undefined &&
+        msg.tabId !== null &&
+        !nonWakeActions.includes(action)
+    ) {
+        await ensureTabAwakeForAgent(Number(msg.tabId));
+        msg.tabId = resolveDiscardedTabAlias(Number(msg.tabId));
+    }
+
     // These actions are handled directly in the background script
     const bgActions = [
         'listTabs', 'newTab', 'closeTab', 'switchTab', 'reloadTab', 'discardTab',
@@ -876,20 +921,28 @@ async function cmdListTabs() {
     });
 
     const tabs = await chrome.tabs.query({});
+    const visibleTabs = tabs.filter(t => !isParkedPlaceholderTab(t));
     return {
         success: true,
-        data: tabs.map(t => ({
-            id: t.id,
-            url: t.url,
-            title: t.title,
-            active: t.active,
-            windowId: t.windowId,
-            windowState: windowStates[t.windowId] || 'unknown',
-            discarded: t.discarded || false,
-            cookieStoreId: t.cookieStoreId,
-            incognito: windowIncognito[t.windowId] || false,
-            index: t.index,
-        }))
+        data: visibleTabs.map(t => {
+            const parkedInfo = _minimizedParkedWindows.get(t.windowId);
+            const isParkedActive = Boolean(
+                parkedInfo &&
+                (t.id === parkedInfo.parkedTabId || t.id === resolveDiscardedTabAlias(parkedInfo.parkedTabId))
+            );
+            return {
+                id: t.id,
+                url: t.url,
+                title: t.title,
+                active: t.active || isParkedActive,
+                windowId: t.windowId,
+                windowState: windowStates[t.windowId] || 'unknown',
+                discarded: t.discarded || false,
+                cookieStoreId: t.cookieStoreId,
+                incognito: windowIncognito[t.windowId] || false,
+                index: t.index,
+            };
+        })
     };
 }
 
@@ -936,7 +989,8 @@ async function cmdReloadTab(tabId) {
 async function cmdDiscardTab(tabId) {
     if (!tabId) return { success: false, error: 'tabId required' };
     try {
-        const discardedTab = await chrome.tabs.discard(tabId);
+        const resolvedId = resolveDiscardedTabAlias(Number(tabId));
+        const discardedTab = await discardTabWithAliasTracking(resolvedId);
         return { success: true, data: discardedTab };
     } catch (e) {
         return { success: false, error: `Failed to discard tab: ${e.message}` };
@@ -2637,4 +2691,516 @@ async function cmdWaitForUrl(tabId, pattern, timeout = 10000) {
 // All commands require an explicit tabId for reliable multi-window, multi-browser targeting.
 // Use browser_list_tabs() to discover tab virtualIds.
 
-console.log('[StealthDOM] Service worker started (bridge mode)');
+// ==========================================
+// Tab Memory Saver & Resource Governor (#37)
+// ==========================================
+
+const GOVERNOR_STORAGE_KEY = 'stealthdom_tab_governor';
+
+const DEFAULT_GOVERNOR_CONFIG = {
+    enabled: true,
+    maxActiveTabs: 3,
+    inactivityTimeoutMinutes: 5,
+    sleepMinimizedWindows: true,
+    protectPinnedTabs: true,
+    protectAudioTabs: false,
+    autoWakeForAgent: true,
+    whitelistDomains: [],
+};
+
+let _governorConfig = { ...DEFAULT_GOVERNOR_CONFIG };
+const _tabLastAccessed = new Map();       // tabId -> timestamp (ms)
+const _tabLastAgentActivity = new Map();  // tabId -> timestamp (ms)
+const _discardedTabAliasMap = new Map();  // oldTabId -> newTabId
+const _minimizedParkedWindows = new Map(); // windowId -> { blankTabId, parkedTabId, originalTitle }
+let _governorSweepInFlight = false;
+
+function resolveDiscardedTabAlias(tabId) {
+    let curr = Number(tabId);
+    let hops = 0;
+    while (_discardedTabAliasMap.has(curr) && hops < 10) {
+        const next = _discardedTabAliasMap.get(curr);
+        if (!next || next === curr) break;
+        curr = next;
+        hops++;
+    }
+    return curr;
+}
+
+function markTabActivity(tabId, isAgent = false) {
+    const id = Number(tabId);
+    if (!Number.isFinite(id)) return;
+    const now = Date.now();
+    _tabLastAccessed.set(id, now);
+    if (isAgent) {
+        _tabLastAgentActivity.set(id, now);
+    }
+}
+
+function getTabLastAccessedMs(tab) {
+    if (_tabLastAccessed.has(tab.id)) {
+        return _tabLastAccessed.get(tab.id);
+    }
+    const ts = typeof tab.lastAccessed === 'number' && tab.lastAccessed > 0
+        ? tab.lastAccessed
+        : Date.now();
+    _tabLastAccessed.set(tab.id, ts);
+    return ts;
+}
+
+function isParkedPlaceholderTab(tab) {
+    if (!tab || !tab.url) return false;
+    const prefix = chrome.runtime.getURL('parked.html');
+    return tab.url.startsWith(prefix);
+}
+
+function isTabWhitelisted(url, whitelistDomains) {
+    if (!url || !Array.isArray(whitelistDomains) || whitelistDomains.length === 0) {
+        return false;
+    }
+    const lowerUrl = url.toLowerCase();
+    let hostname = '';
+    try {
+        hostname = new URL(url).hostname.toLowerCase();
+    } catch {
+        hostname = '';
+    }
+    for (const rawPattern of whitelistDomains) {
+        const pattern = String(rawPattern || '').trim().toLowerCase();
+        if (!pattern) continue;
+        if (hostname && (hostname === pattern || hostname.endsWith('.' + pattern))) {
+            return true;
+        }
+        if (lowerUrl.includes(pattern)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function isProtectedFromGovernor(tab, cfg, windowStates, focusedWindowId) {
+    if (!tab || !tab.id || tab.discarded) return true;
+    if (isParkedPlaceholderTab(tab)) return true;
+
+    const url = tab.url || '';
+    if (
+        !url ||
+        url === 'about:blank' ||
+        url.startsWith('chrome://') ||
+        url.startsWith('brave://') ||
+        url.startsWith('chrome-extension://') ||
+        url.startsWith('devtools://') ||
+        url.startsWith('edge://')
+    ) {
+        return true;
+    }
+
+    const winState = windowStates[tab.windowId] || 'normal';
+
+    // Never discard the active tab in a non-minimized window
+    if (tab.active && winState !== 'minimized') {
+        return true;
+    }
+
+    // Only discard active tabs in minimized windows when sleepMinimizedWindows is enabled
+    if (tab.active && winState === 'minimized' && !cfg.sleepMinimizedWindows) {
+        return true;
+    }
+
+    // Never discard the active tab in the currently focused window
+    if (tab.active && tab.windowId === focusedWindowId && winState !== 'minimized') {
+        return true;
+    }
+
+    if (cfg.protectPinnedTabs && tab.pinned) return true;
+    if (cfg.protectAudioTabs && tab.audible) return true;
+
+    // Protect tabs touched by an AI agent MCP command within the last 60 seconds
+    const lastAgent = _tabLastAgentActivity.get(tab.id) || 0;
+    if (Date.now() - lastAgent < 60000) {
+        return true;
+    }
+
+    if (isTabWhitelisted(url, cfg.whitelistDomains)) {
+        return true;
+    }
+
+    return false;
+}
+
+async function discardTabWithAliasTracking(tabId) {
+    const id = Number(tabId);
+    if (_attachedDebuggers.has(id)) {
+        await detachDebugger(id);
+    }
+    _injectedTabs.delete(id);
+
+    const discardedTab = await chrome.tabs.discard(id);
+    if (discardedTab && discardedTab.id && discardedTab.id !== id) {
+        _discardedTabAliasMap.set(id, discardedTab.id);
+        const prevAccess = _tabLastAccessed.get(id) || Date.now();
+        _tabLastAccessed.set(discardedTab.id, prevAccess);
+        _tabLastAccessed.delete(id);
+
+        for (const [winId, info] of _minimizedParkedWindows.entries()) {
+            if (info.parkedTabId === id) {
+                info.parkedTabId = discardedTab.id;
+                _minimizedParkedWindows.set(winId, info);
+            }
+        }
+    }
+    return discardedTab;
+}
+
+async function parkAndDiscardMinimizedWindowTab(tab) {
+    const win = await chrome.windows.get(tab.windowId).catch(() => null);
+    if (!win || win.state !== 'minimized') {
+        return null;
+    }
+
+    const existing = _minimizedParkedWindows.get(tab.windowId);
+    if (existing) {
+        const existingBlank = await chrome.tabs.get(existing.blankTabId).catch(() => null);
+        if (existingBlank) {
+            await chrome.tabs.update(existing.blankTabId, { active: true }).catch(() => {});
+            const discarded = await discardTabWithAliasTracking(tab.id);
+            if (discarded && discarded.id) {
+                existing.parkedTabId = discarded.id;
+                _minimizedParkedWindows.set(tab.windowId, existing);
+            }
+            return discarded;
+        }
+        _minimizedParkedWindows.delete(tab.windowId);
+    }
+
+    const origTitle = tab.title || tab.url || 'Sleeping Window';
+    const parkedUrl =
+        chrome.runtime.getURL('parked.html') +
+        `?windowId=${encodeURIComponent(tab.windowId)}` +
+        `&tabId=${encodeURIComponent(tab.id)}` +
+        `&title=${encodeURIComponent(origTitle)}`;
+
+    // Create with active: false first so Chromium NavigateParams uses NO_ACTION
+    // instead of SHOW_WINDOW (which would un-minimize a minimized window on Windows),
+    // then activate via chrome.tabs.update.
+    const blankTab = await chrome.tabs.create({
+        windowId: tab.windowId,
+        url: parkedUrl,
+        active: false,
+        index: tab.index + 1,
+    });
+    await chrome.tabs.update(blankTab.id, { active: true });
+    const winCheck = await chrome.windows.get(tab.windowId).catch(() => null);
+    if (winCheck && winCheck.state !== 'minimized') {
+        await chrome.windows.update(tab.windowId, { state: 'minimized' }).catch(() => {});
+    }
+
+    _minimizedParkedWindows.set(tab.windowId, {
+        blankTabId: blankTab.id,
+        parkedTabId: tab.id,
+        originalTitle: origTitle,
+    });
+
+    try {
+        const discardedTab = await discardTabWithAliasTracking(tab.id);
+        if (discardedTab && discardedTab.id) {
+            _minimizedParkedWindows.set(tab.windowId, {
+                blankTabId: blankTab.id,
+                parkedTabId: discardedTab.id,
+                originalTitle: origTitle,
+            });
+        }
+        return discardedTab;
+    } catch (err) {
+        // Clean up placeholder tab if discard failed
+        _minimizedParkedWindows.delete(tab.windowId);
+        await chrome.tabs.remove(blankTab.id).catch(() => {});
+        throw err;
+    }
+}
+
+async function restoreParkedMinimizedWindow(windowId, parkedTabId, senderBlankTabId) {
+    const winId = Number(windowId);
+    const info = _minimizedParkedWindows.get(winId);
+    const rawTargetId = parkedTabId || (info && info.parkedTabId);
+    const targetTabId = rawTargetId ? resolveDiscardedTabAlias(Number(rawTargetId)) : null;
+    const blankTabId = Number(senderBlankTabId || (info && info.blankTabId)) || null;
+
+    if (winId) {
+        _minimizedParkedWindows.delete(winId);
+    }
+
+    if (targetTabId) {
+        await chrome.tabs.update(targetTabId, { active: true }).catch(() => {});
+        markTabActivity(targetTabId, false);
+    }
+    if (blankTabId) {
+        await chrome.tabs.remove(blankTabId).catch(() => {});
+    }
+    return { ok: true, restoredTabId: targetTabId };
+}
+
+async function ensureTabAwakeForAgent(tabId) {
+    let resolvedId = resolveDiscardedTabAlias(Number(tabId));
+    let tab = await chrome.tabs.get(resolvedId).catch(() => null);
+    if (!tab) return;
+
+    // If this tab's window was parked with parked.html, remove the placeholder and re-activate the real tab
+    if (_minimizedParkedWindows.has(tab.windowId)) {
+        const info = _minimizedParkedWindows.get(tab.windowId);
+        await restoreParkedMinimizedWindow(tab.windowId, resolvedId, info ? info.blankTabId : null);
+        resolvedId = resolveDiscardedTabAlias(resolvedId);
+        tab = await chrome.tabs.get(resolvedId).catch(() => null);
+        if (!tab) return;
+    }
+
+    if (!tab.discarded && tab.status === 'complete') {
+        return;
+    }
+
+    if (tab.discarded) {
+        await chrome.tabs.reload(resolvedId).catch(() => {});
+    }
+
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+        const current = await chrome.tabs.get(resolvedId).catch(() => null);
+        if (!current) return;
+        if (!current.discarded && current.status === 'complete') {
+            return;
+        }
+        await new Promise(r => setTimeout(r, 150));
+    }
+}
+
+async function computeGovernorStats() {
+    const tabs = await chrome.tabs.query({});
+    let loadedCount = 0;
+    let sleepingCount = 0;
+    for (const t of tabs) {
+        if (isParkedPlaceholderTab(t)) continue;
+        if (t.discarded) {
+            sleepingCount++;
+        } else {
+            loadedCount++;
+        }
+    }
+    return {
+        loadedCount,
+        sleepingCount,
+        parkedWindowsCount: _minimizedParkedWindows.size,
+    };
+}
+
+async function getGovernorStateAndStats() {
+    const stats = await computeGovernorStats();
+    return {
+        ok: true,
+        config: _governorConfig,
+        stats,
+    };
+}
+
+async function setGovernorConfig(newConfig) {
+    _governorConfig = {
+        ...DEFAULT_GOVERNOR_CONFIG,
+        ...(newConfig || {}),
+    };
+    await chrome.storage.local.set({ [GOVERNOR_STORAGE_KEY]: _governorConfig });
+    if (_governorConfig.enabled) {
+        await runTabGovernorSweep(false);
+    }
+    const stats = await computeGovernorStats();
+    return {
+        ok: true,
+        config: _governorConfig,
+        stats,
+    };
+}
+
+async function sleepAllInactiveTabsNow() {
+    const sleptCount = await runTabGovernorSweep(true);
+    const stats = await computeGovernorStats();
+    return {
+        ok: true,
+        sleptCount,
+        stats,
+    };
+}
+
+async function runTabGovernorSweep(forceSleepAllInactive = false) {
+    if (_governorSweepInFlight) return 0;
+    _governorSweepInFlight = true;
+    let sleptCount = 0;
+
+    try {
+        const windows = await chrome.windows.getAll();
+        const windowStates = {};
+        let focusedWindowId = null;
+
+        for (const w of windows) {
+            windowStates[w.id] = w.state || 'normal';
+            if (w.focused && w.state !== 'minimized') {
+                focusedWindowId = w.id;
+            }
+            // Auto-restore any parked window that is no longer minimized
+            if (w.state !== 'minimized' && _minimizedParkedWindows.has(w.id)) {
+                const info = _minimizedParkedWindows.get(w.id);
+                await restoreParkedMinimizedWindow(w.id, info.parkedTabId, info.blankTabId);
+            }
+        }
+
+        if (!_governorConfig.enabled && !forceSleepAllInactive) {
+            return 0;
+        }
+
+        const allTabs = await chrome.tabs.query({});
+        const now = Date.now();
+        const timeoutMs =
+            _governorConfig.inactivityTimeoutMinutes > 0
+                ? _governorConfig.inactivityTimeoutMinutes * 60 * 1000
+                : 0;
+
+        // Count non-sleepable visible active tabs (e.g. active tabs in non-minimized windows)
+        let lockedActiveCount = 0;
+        const candidates = [];
+
+        for (const t of allTabs) {
+            if (isParkedPlaceholderTab(t) || t.discarded) continue;
+
+            if (isProtectedFromGovernor(t, _governorConfig, windowStates, focusedWindowId)) {
+                lockedActiveCount++;
+                continue;
+            }
+            candidates.push(t);
+        }
+
+        // Sort candidates most-recently-accessed first
+        candidates.sort((a, b) => getTabLastAccessedMs(b) - getTabLastAccessedMs(a));
+
+        const maxAllowedTotal = Number(_governorConfig.maxActiveTabs) || 0;
+        const allowedCandidateKeep =
+            maxAllowedTotal > 0 ? Math.max(0, maxAllowedTotal - lockedActiveCount) : Infinity;
+
+        for (let idx = 0; idx < candidates.length; idx++) {
+            const tab = candidates[idx];
+            const lastAccess = getTabLastAccessedMs(tab);
+            const idleMs = now - lastAccess;
+
+            const exceedsCap = maxAllowedTotal > 0 && idx >= allowedCandidateKeep;
+            const exceedsTimeout = timeoutMs > 0 && idleMs >= timeoutMs;
+
+            if (forceSleepAllInactive || exceedsCap || exceedsTimeout) {
+                try {
+                    const winState = windowStates[tab.windowId] || 'normal';
+                    if (tab.active && winState === 'minimized') {
+                        const res = await parkAndDiscardMinimizedWindowTab(tab);
+                        if (res) sleptCount++;
+                    } else if (!tab.active) {
+                        const res = await discardTabWithAliasTracking(tab.id);
+                        if (res) sleptCount++;
+                    }
+                } catch (err) {
+                    console.warn(`[StealthDOM Governor] Could not sleep tab ${tab.id}:`, err.message);
+                }
+            }
+        }
+    } catch (err) {
+        console.warn('[StealthDOM Governor] Sweep error:', err.message);
+    } finally {
+        _governorSweepInFlight = false;
+    }
+
+    return sleptCount;
+}
+
+// Track tab activations and clean up parked placeholders if user switches tabs manually
+chrome.tabs.onActivated.addListener(async ({ tabId, windowId }) => {
+    markTabActivity(tabId, false);
+    if (_minimizedParkedWindows.has(windowId)) {
+        const info = _minimizedParkedWindows.get(windowId);
+        if (info && tabId !== info.blankTabId) {
+            _minimizedParkedWindows.delete(windowId);
+            await chrome.tabs.remove(info.blankTabId).catch(() => {});
+        }
+    }
+    if (_governorConfig.enabled && _governorConfig.maxActiveTabs > 0) {
+        setTimeout(() => runTabGovernorSweep(false), 600);
+    }
+});
+
+chrome.tabs.onCreated.addListener((tab) => {
+    if (tab && tab.id && !isParkedPlaceholderTab(tab)) {
+        markTabActivity(tab.id, false);
+        if (_governorConfig.enabled && _governorConfig.maxActiveTabs > 0) {
+            setTimeout(() => runTabGovernorSweep(false), 1200);
+        }
+    }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+    _tabLastAccessed.delete(tabId);
+    _tabLastAgentActivity.delete(tabId);
+    for (const [winId, info] of _minimizedParkedWindows.entries()) {
+        if (info.blankTabId === tabId || info.parkedTabId === tabId) {
+            _minimizedParkedWindows.delete(winId);
+        }
+    }
+});
+
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+    if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+    if (_minimizedParkedWindows.has(windowId)) {
+        const win = await chrome.windows.get(windowId).catch(() => null);
+        if (win && win.state !== 'minimized') {
+            const info = _minimizedParkedWindows.get(windowId);
+            await restoreParkedMinimizedWindow(windowId, info.parkedTabId, info.blankTabId);
+        }
+    }
+});
+
+// Initialize Governor config and clean up any orphaned parked.html tabs from prior session
+(async function initTabGovernor() {
+    try {
+        const stored = await chrome.storage.local.get([GOVERNOR_STORAGE_KEY]);
+        if (stored && stored[GOVERNOR_STORAGE_KEY]) {
+            _governorConfig = {
+                ...DEFAULT_GOVERNOR_CONFIG,
+                ...stored[GOVERNOR_STORAGE_KEY],
+            };
+        } else {
+            await chrome.storage.local.set({ [GOVERNOR_STORAGE_KEY]: _governorConfig });
+        }
+
+        // Clean up any leftover parked.html placeholder tabs from before service worker reload
+        const allTabs = await chrome.tabs.query({});
+        for (const t of allTabs) {
+            if (isParkedPlaceholderTab(t)) {
+                try {
+                    const u = new URL(t.url);
+                    const origTabId = Number(u.searchParams.get('tabId'));
+                    if (origTabId) {
+                        await chrome.tabs.update(origTabId, { active: true }).catch(() => {});
+                    }
+                    if (u.searchParams.get('reloadExtension') === '1') {
+                        await chrome.windows.update(t.windowId, { state: 'minimized' }).catch(() => {});
+                    }
+                } catch {}
+                await chrome.tabs.remove(t.id).catch(() => {});
+            } else if (!t.discarded) {
+                getTabLastAccessedMs(t);
+            }
+        }
+    } catch (err) {
+        console.warn('[StealthDOM Governor] Init error:', err.message);
+    }
+})();
+
+// Periodic sweep every 15 seconds
+setInterval(() => {
+    if (_governorConfig.enabled) {
+        runTabGovernorSweep(false);
+    }
+}, 15000);
+
+console.log('[StealthDOM] Service worker started (bridge mode + tab governor)');
