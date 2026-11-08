@@ -633,6 +633,9 @@ async function handleBackgroundCommand(msg) {
             return await cmdHandleDialog(msg.tabId, msg.accept, msg.promptText);
         case 'getActiveDialog':
             return await cmdGetActiveDialog(msg.tabId);
+        case 'reloadExtension':
+            setTimeout(() => chrome.runtime.reload(), 150);
+            return { success: true, data: 'Reloading StealthDOM extension service worker in 150ms' };
 
         default:
             return { success: false, error: `Unknown background action: ${action}` };
@@ -826,6 +829,7 @@ async function bridgeRouteCommand(msg) {
         'enableBlock', 'disableBlock',
         'handleDialog', 'getActiveDialog',
         'waitForUrl', 'waitForCondition', 'executeSequence',
+        'reloadExtension',
     ];
 
     try {
