@@ -924,21 +924,6 @@ async def browser_switch_tab(tab_id: int | str) -> str:
     return f"Switched to tab {tab_id}"
 
 
-@mcp.tool()
-async def browser_handle_dialog(tab_id: int | str, accept: bool = True, prompt_text: str | None = None) -> str:
-    """Accept or dismiss a native JavaScript dialog (alert, confirm, prompt, beforeunload).
-    
-    Args:
-        tab_id: ID of the tab (get from browser_list_tabs)
-        accept: True to accept/OK/Leave, False to dismiss/Cancel
-        prompt_text: Optional text to enter into a prompt dialog
-    """
-    result = await send_command("handleDialog", tabId=tab_id, accept=accept, promptText=prompt_text)
-    if not result.get("success"):
-        return f"Error: {result.get('error')}"
-    return "Dialog handled successfully"
-
-
 # ==========================================
 # Window Management Tools
 # ==========================================
@@ -1190,7 +1175,7 @@ async def browser_proxy_fetch(
 
 @mcp.tool()
 async def browser_handle_dialog(tab_id: int | str, accept: bool = True, prompt_text: str | None = None) -> str:
-    """Accept or dismiss a native JavaScript dialog (alert, confirm, prompt).
+    """Accept or dismiss a native JavaScript dialog (alert, confirm, prompt, beforeunload).
     
     Args:
         accept: True to accept (click OK), False to dismiss (click Cancel)

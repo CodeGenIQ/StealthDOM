@@ -1405,12 +1405,27 @@
   },
   {
     "name": "browser_get_cookies",
-    "description": "Get all cookies for a URL.\n\n    Args:\n        url: URL to get cookies for (e.g., 'https://example.com')\n    ",
+    "description": "Get all cookies for a URL.\n\n    Args:\n        url: URL to get cookies for (e.g., 'https://example.com')\n        tab_id: Optional ID of the tab to get cookies for. If provided, respects incognito/container contexts.\n    ",
     "inputSchema": {
       "properties": {
         "url": {
           "title": "Url",
           "type": "string"
+        },
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tab Id"
         }
       },
       "required": [
@@ -1422,7 +1437,7 @@
   },
   {
     "name": "browser_set_cookie",
-    "description": "Set a cookie in the browser.\n\n    Args:\n        url:             URL the cookie belongs to (e.g., 'https://example.com')\n        name:            Cookie name\n        value:           Cookie value\n        domain:          Optional cookie domain\n        path:            Optional cookie path (default '/')\n        secure:          Optional secure flag\n        http_only:       Optional httpOnly flag\n        expiration_date: Optional Unix timestamp for expiry\n    ",
+    "description": "Set a cookie in the browser.\n\n    Args:\n        url:             URL the cookie belongs to (e.g., 'https://example.com')\n        name:            Cookie name\n        value:           Cookie value\n        domain:          Optional cookie domain\n        path:            Optional cookie path (default '/')\n        secure:          Optional secure flag\n        http_only:       Optional httpOnly flag\n        expiration_date: Optional Unix timestamp for expiry\n        tab_id:          Optional ID of the tab (to set cookie in incognito context)\n    ",
     "inputSchema": {
       "properties": {
         "url": {
@@ -1496,6 +1511,21 @@
           ],
           "default": null,
           "title": "Expiration Date"
+        },
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tab Id"
         }
       },
       "required": [
@@ -1509,7 +1539,7 @@
   },
   {
     "name": "browser_delete_cookie",
-    "description": "Delete a cookie from the browser.\n\n    Args:\n        url:  URL the cookie belongs to (e.g., 'https://example.com')\n        name: Name of the cookie to delete\n    ",
+    "description": "Delete a cookie from the browser.\n\n    Args:\n        url:  URL the cookie belongs to (e.g., 'https://example.com')\n        name: Name of the cookie to delete\n        tab_id: Optional ID of the tab (to delete cookie from incognito context)\n    ",
     "inputSchema": {
       "properties": {
         "url": {
@@ -1519,6 +1549,21 @@
         "name": {
           "title": "Name",
           "type": "string"
+        },
+        "tab_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tab Id"
         }
       },
       "required": [
@@ -1685,7 +1730,7 @@
   },
   {
     "name": "browser_handle_dialog",
-    "description": "Accept or dismiss a native JavaScript dialog (alert, confirm, prompt).\n    \n    Args:\n        accept: True to accept (click OK), False to dismiss (click Cancel)\n        prompt_text: Optional text to enter into a prompt dialog\n    ",
+    "description": "Accept or dismiss a native JavaScript dialog (alert, confirm, prompt, beforeunload).\n    \n    Args:\n        accept: True to accept (click OK), False to dismiss (click Cancel)\n        prompt_text: Optional text to enter into a prompt dialog\n    ",
     "inputSchema": {
       "properties": {
         "tab_id": {

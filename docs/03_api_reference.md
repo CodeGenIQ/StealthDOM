@@ -41,7 +41,7 @@ Execute multiple actions sequentially with zero latency. If a step fails, the se
 }
 ```
 
-- **MCP Tool:** `browser_execute_sequence`
+- **MCP Tool:** `browser_execute_sequence(tab_id, sequence, frame_id=None)`
 - **Handled by:** Background Script + Content Scripts
 
 ---
@@ -187,7 +187,7 @@ Wait for a DOM element to appear. Polls every 200ms.
 ```json
 { "action": "waitForSelector", "selector": ".loaded", "timeout": 10000 }
 ```
-**MCP Tool:** `browser_wait(tab_id, selector, wait_type='selector', timeout=10000, frame_id=None)`  
+**MCP Tool:** `browser_wait(tab_id, target, wait_type='selector', timeout=10000, frame_id=None)`  
 **Handled by:** Content Script
 
 ---
@@ -221,7 +221,7 @@ Ideal for complex UI state conditions that can't be expressed via simple selecto
 ```json
 { "action": "waitForCondition", "code": "return document.querySelectorAll('.item').length > 5", "timeout": 10000 }
 ```
-**MCP Tool:** `browser_wait(tab_id, condition_code, wait_type='condition', timeout=10000, frame_id=None)`  
+**MCP Tool:** `browser_wait(tab_id, target, wait_type='condition', timeout=10000, frame_id=None)`  
 **Handled by:** Background Script (native `MAIN` world injection)
 
 ---
@@ -236,7 +236,7 @@ Get the full visible text content of the current page.
 ```json
 { "action": "getPageText" }
 ```
-**MCP Tool:** `browser_read_content(tab_id, max_length=0, content_type='text')`  
+**MCP Tool:** `browser_read_content(tab_id, selector=None, content_type='text', max_length=0, frame_id=None)`  
 **Handled by:** Content Script
 
 ---
@@ -252,7 +252,7 @@ Get the full HTML of the current page.
 { "action": "getPageHTML" }
 { "action": "getPageHTML", "maxLength": 50000 }
 ```
-**MCP Tool:** `browser_read_content(tab_id, max_length=0, content_type='html')`  
+**MCP Tool:** `browser_read_content(tab_id, selector=None, content_type='html', max_length=0, frame_id=None)`  
 **Handled by:** Content Script
 
 ---
@@ -1026,6 +1026,17 @@ Set files on a file input element using a data URL.
 
 ---
 
+### setInputFilesCDP
+Natively set files on an `input[type=file]` element via CDP (`DOM.setFileInputFiles`), producing `isTrusted: true` events.
+
+```json
+{ "action": "setInputFilesCDP", "selector": "input[type=file]", "files": ["C:/path/to/file.png"] }
+```
+**MCP Tool:** `browser_upload_file_cdp(tab_id, selector, file_paths=None, data_urls=None)`  
+**Handled by:** Background Script (CDP)
+
+---
+
 ### hover
 Hover over a DOM element. Triggers mouseenter, mouseover, and mousemove events.
 Useful for revealing dropdown menus, tooltips, and hover-activated UI.
@@ -1055,7 +1066,7 @@ Pattern can be a substring (e.g., '/dashboard') or a regex (e.g., '/order/[0-9]+
 ```json
 { "action": "waitForUrl", "pattern": "/dashboard", "timeout": 15000 }
 ```
-**MCP Tool:** `browser_wait(tab_id, pattern, wait_type='url', timeout=10000)`  
+**MCP Tool:** `browser_wait(tab_id, target, wait_type='url', timeout=10000, frame_id=None)`  
 **Handled by:** Background Script
 
 ---

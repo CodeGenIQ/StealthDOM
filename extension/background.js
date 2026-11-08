@@ -994,6 +994,14 @@ async function cmdDiscardTab(tabId) {
     if (!tabId) return { success: false, error: 'tabId required' };
     try {
         const resolvedId = resolveDiscardedTabAlias(Number(tabId));
+        const tab = await chrome.tabs.get(resolvedId).catch(() => null);
+        if (tab && tab.active) {
+            const win = await chrome.windows.get(tab.windowId).catch(() => null);
+            if (win && win.state === 'minimized') {
+                const discardedTab = await parkAndDiscardMinimizedWindowTab(tab);
+                return { success: true, data: discardedTab };
+            }
+        }
         const discardedTab = await discardTabWithAliasTracking(resolvedId);
         return { success: true, data: discardedTab };
     } catch (e) {
