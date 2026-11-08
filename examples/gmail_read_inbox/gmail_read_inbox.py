@@ -1,5 +1,6 @@
 """
 StealthDOM Example: Read Gmail Inbox
+(NOTE: For full production Gmail automation, use `Gmail Tools/gmail_cli.py`!)
 
 This script demonstrates using StealthDOM's WebSocket API to:
 1. Navigate to Gmail
@@ -109,7 +110,7 @@ async def main():
         print("[2] Waiting for inbox to load...")
         await asyncio.sleep(4)
 
-        result = await send(ws, "waitForSelector", selector="tr.zA", tabId=tab_id)
+        result = await send(ws, "waitForSelector", selector='div[role="main"] tr.zA', tabId=tab_id)
         if not result.get("success"):
             print("[X] Gmail inbox didn't load. Are you logged in?")
             return
@@ -118,7 +119,7 @@ async def main():
 
         # Step 3: Scan email rows for the search keyword
         print(f'\n[3] Searching for emails with "{SEARCH_KEYWORD}" in the subject...')
-        result = await send(ws, "querySelectorAll", selector="tr.zA", limit=50, tabId=tab_id)
+        result = await send(ws, "querySelectorAll", selector='div[role="main"] tr.zA', limit=50, tabId=tab_id)
         if not result.get("success"):
             print("[X] Could not query email rows.")
             return
